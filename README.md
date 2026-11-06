@@ -35,13 +35,14 @@ Everything is built from source: mainline **U-Boot 2024.01** (SPL + U-Boot,
 with a new `zlg_m6g2c` board port), **Linux 6.12 LTS** with an M6G2C device
 tree, and a **Debian 13 "trixie" armhf** root filesystem.
 
-> **NEP firmware 20210303.** This branch, `nep-fw-20210303`, is for gateways
-> running NEP firmware major version **20210303** (`major=` in the
-> `[version]` section of `/root/Gateway/gateway.cfg`), whose local web
-> interface still works. Gateways with firmware **20230903**, where NEP
-> disabled the local web interface, get their own branch, `nep-fw-20230903`.
-> `zlg-import` and `install-web.sh` check the version and stop on a
-> mismatch (section 7).
+> **NEP firmware 20230903: work in progress.** This branch,
+> `nep-fw-20230903`, is for gateways running NEP firmware major version
+> **20230903** (`major=` in the `[version]` section of
+> `/root/Gateway/gateway.cfg`), where NEP disabled the local web interface.
+> It starts as a copy of `nep-fw-20210303`, the branch for firmware
+> 20210303, and has **not been tried on a 20230903 gateway yet**: the rest
+> of this README still describes the 20210303 unit. `zlg-import` and
+> `install-web.sh` check the version and stop on a mismatch (section 7).
 
 > **Status:** this image runs in production on the EPC-M6G2C it was
 > developed on, together with NEP's gateway software and the modernised web
@@ -542,7 +543,7 @@ systemctl list-units 'zlg*'
   `/etc/hostname` and `/etc/hosts` to match. Until then it is `m6g2c`
   (`HOSTNAME_TARGET` in `config.env`). `ZLG_HOSTNAME=0` in
   `/etc/default/zlg` keeps the hostname as it is.
-* **The NEP firmware version.** This kit is for NEP firmware 20210303
+* **The NEP firmware version.** This branch is for NEP firmware 20230903
   (`board-files/zlg/nep-firmware`). `zlg-import` reads `major=` from the
   NAND's `/root/Gateway/gateway.cfg`, and `install-web.sh` from the copy's,
   and both stop if the gateway runs another version, naming the branch to

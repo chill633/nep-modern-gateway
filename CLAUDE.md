@@ -1,5 +1,13 @@
 # Notes for Claude: ZLG EPC-M6G2C Debian kit
 
+**Branch nep-fw-20230903** (NEP firmware 20230903, the "New" unit): work in
+progress, branched from nep-fw-20210303 on 2026-11-06 with only
+nep-firmware changed. Nothing here has run on the New unit yet; everything
+below describes the Old unit (firmware 20210303). Next: get the New unit's
+gateway.cfg, engineer.cfg, crontab, start-up scripts, web bundle and
+/root/Gateway + /opt listings; find how NEP disabled the local web
+interface and whether the gateway works without its cloud (gateway-mqtt-nep).
+
 Build kit for a Debian 13 (trixie, armhf) SD-card image for the ZLG M6G2C-256LI
 module (i.MX6UL, 256 MB DDR3L, Spansion S34ML02G2 NAND) in a ZLG EPC-M6G2C box.
 The box is an NEP solar gateway: 12 dual-panel microinverters, reported as 24
