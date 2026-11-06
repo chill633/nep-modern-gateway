@@ -625,11 +625,14 @@ port 80 and stops ZLG's; `--revert` goes back.
   `gateway-mqtt-nep`): the port has been verified page by page against
   ZLG's server, so run `--switch` right after installing; there is nothing
   to compare.
-* **A different NEP version** (for example the newer one with
-  `gateway-mqtt-nep`): its pages and code haven't been through the port
-  yet. Compare `http://<board>:8080/` with ZLG's `http://<board>/` first,
-  check `journalctl -u zlg-web-fpm` for PHP errors, and switch once
-  everything matches.
+* **Firmware 20230903:** use the `nep-fw-20230903` branch, where the same
+  holds; it was checked page by page in the browser on a 20230903 gateway.
+  (NEP's own server shows nothing there, so there is nothing to compare.)
+* **Any other NEP version:** its pages and code haven't been through the
+  port yet. Compare `http://<board>:8080/` with ZLG's `http://<board>/`
+  first, check `journalctl -u zlg-web-fpm` for PHP errors, and switch once
+  everything matches. The installers' firmware check stops first; pass
+  `--any-firmware` to go ahead.
 
 Once switched, re-running `install-web.sh` keeps port 80. After
 `zlg-import`, re-run `install-web.sh --rebuild`.
