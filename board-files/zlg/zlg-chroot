@@ -128,7 +128,7 @@ start() {
 	# the shifted clock (zlg-time.so) and its offset
 	write_offset
 	[ -f "$PRELOAD" ] || {
-		echo "zlg-chroot: $PRELOAD is missing (see README section 9)" >&2
+		echo "zlg-chroot: $PRELOAD is missing (see README section 7)" >&2
 		exit 1
 	}
 	mkdir -p "$ROOT/m6g2c/lib"

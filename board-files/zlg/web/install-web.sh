@@ -7,7 +7,7 @@
 #   sudo sh install-web.sh --revert   back to ZLG's server on port 80
 #   sudo sh install-web.sh --rebuild  only re-run zlg-web-port
 #
-# Needs zlg/install.sh and zlg-import done first (README section 9), and
+# Needs zlg/install.sh and zlg-import done first (README section 7), and
 # internet access for apt. NEP's code is converted on the board by
 # zlg-web-port from /srv/zlg; the original stays as it is.
 set -eu

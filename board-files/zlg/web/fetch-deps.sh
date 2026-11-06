@@ -1,6 +1,6 @@
 #!/bin/sh
 # Download the open-source parts of the new web interface into deps/, each
-# pinned by checksum. Run on the PC (the rootfs stage and README section 9
+# pinned by checksum. Run on the PC (the rootfs stage and README section 7
 # do this); the board gets deps/ inside the migration bundle.
 #
 #   CodeIgniter 3.1.13       MIT     replaces NEP's CodeIgniter 2.1.3

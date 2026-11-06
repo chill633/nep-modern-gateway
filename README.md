@@ -15,8 +15,8 @@ tree, and a **Debian 13 "trixie" armhf** root filesystem.
 
 > **Status:** this image runs in production on the EPC-M6G2C it was
 > developed on, together with NEP's gateway software and the modernised web
-> interface (section 9). The hardware and the software have been tested on
-> that unit and work; see section 8 for exactly what was checked. Nothing
+> interface (section 7). The hardware and the software have been tested on
+> that unit and work; see section 9 for exactly what was checked. Nothing
 > needs re-checking there. The checks in section 4 are for a different
 > unit or carrier board.
 
@@ -92,11 +92,18 @@ To see whether the image or the card is at fault, run
 `sudo tools/check-ext4-gdt.py out/m6g2c-debian-trixie-armhf.img` (the image)
 and `sudo tools/check-ext4-gdt.py /dev/sdX2` (the card).
 
-Serial console: **UART1, 115200 8N1**. Log in as **debian / debian**; you
-must choose a new password at first login (root is locked, use `sudo`). The
-first boot grows the root partition to the card size and creates SSH host
-keys. The Ethernet port comes up with DHCP (systemd-networkd), and the
-battery-backed PCF85063 RTC is used as the system clock (`/dev/rtc0`).
+Serial console: **UART1, 115200 8N1**, output only. On the gateway only the
+console's TX and GROUND pins are connected to the board, so you can watch
+the boot messages there, but it doesn't accept input and you can't log in
+from it.
+
+To log in, use SSH, which means the gateway has to be on a network: wired
+Ethernet (it comes up with DHCP, systemd-networkd) or Wi-Fi (section 5a;
+the Wi-Fi settings are built into the image, so set them before building).
+Log in as **debian / debian**; you must choose a new password at first
+login (root is locked, use `sudo`). The first boot grows the root partition
+to the card size and creates the SSH host keys, and the battery-backed
+PCF85063 RTC is used as the system clock (`/dev/rtc0`).
 
 ### Booting from the SD card
 
@@ -243,11 +250,11 @@ again with no error message.
   longer matches the image (see section 3). Rewrite it with
   `tools/write-sdcard.sh`. The kernel command line has `fsck.repair=yes`, so
   milder damage is repaired automatically at boot.
-* Emergency mode with no way to type → the shell is on the serial console
-  (UART1) only. A USB keyboard can't reach it, because there is no display
-  console. Wire the adapter's TX to the board's RX: three wires, GND, TX→RX
-  and RX←TX. Once the system boots normally, SSH works as well (DHCP on
-  ENET2; user `debian`).
+* Emergency mode → its shell is on the serial console only, which on the
+  gateway is output only (see section 3), and SSH isn't running yet. Read
+  the cause from the console output, then fix the card on the PC: rewrite it
+  with `tools/write-sdcard.sh`, or check it with `tools/check-ext4-gdt.py`
+  and `e2fsck`.
 * Linux boots but no network → on the EPC-M6G2C the PHY address is known (5).
   If `dmesg` shows no PHY, the RMII pins or the 50 MHz reference clock
   direction differ from the assumption; see step 2.
@@ -296,6 +303,67 @@ default:
 Remove `read-only` from a partition only once you intend to take over the
 NAND, for example to install this system into it with `mtd-utils`/UBI
 (included).
+
+## 5a. Wi-Fi (TP-Link TL-WN823N USB dongle)
+
+The dongle that ships with the EPC-M6G2C works with the in-kernel
+`rtl8xxxu` driver: v2/v3 (USB ID 2357:0109) use the RTL8192EU chip, v1 the
+RTL8192CU. Its firmware comes from Debian's `firmware-realtek` package. Plug
+it into the USB-A port on the bottom of the Gateway; `lsusb` shows which
+version you have.
+
+Set the network in `local.env` (next to `config.env`; keep it private):
+
+```sh
+: "${WIFI_SSID:=My Network}"
+: "${WIFI_PASSPHRASE:=my passphrase}"
+: "${WIFI_COUNTRY:=US}"
+```
+
+The rootfs stage writes `/etc/wpa_supplicant/wpa_supplicant-wlan0.conf`
+(mode 600). It contains only the derived WPA2 key, not the passphrase. udev
+starts `wpa_supplicant@wlan0` when the dongle appears, and systemd-networkd
+gets an address by DHCP. Without the dongle the boot doesn't wait for it.
+`net.ifnames=0` on the kernel command line keeps the names `eth0` and `wlan0`.
+
+On the board: `iw dev wlan0 link` shows the association, `ip addr show wlan0`
+the address, and `journalctl -u wpa_supplicant@wlan0` any errors. To change
+networks later, edit the config file (`wpa_passphrase "SSID" "pass"` makes the
+`network={}` block), then `sudo systemctl restart wpa_supplicant@wlan0`.
+
+The kernel only trusts the upstream-signed copy of the Wi-Fi regulatory
+database, so the rootfs stage selects `/lib/firmware/regulatory.db-upstream`.
+Otherwise the kernel logs "regulatory.db is malformed" and ignores
+`WIFI_COUNTRY`. Check with `iw reg get`.
+
+WPA2/WPA3 "transition mode" access points accept this WPA2 key. A WPA3-only
+(SAE) network needs the plain passphrase and `key_mgmt=SAE` (with
+`ieee80211w=2`) instead; trixie's wpa_supplicant supports that, but whether
+`rtl8xxxu` does SAE on your dongle is untested.
+
+## 5b. Display (Tianma TM043NBH02)
+
+The LCD runs through the i.MX LCD controller's DRM driver (`mxsfb`) and a
+generic `panel-dpi` panel with ZLG's timings: 9 MHz, 480x272. Because the
+panel is wired with 16 data lines, it needs RGB565. `panel-dpi` can't express
+that (as of 6.12 the `data-mapping` property is only implemented for LVDS
+panels), so `patches/linux/0001-...` adds it to `panel-dpi`. Without it the colours would be wrong. The kernel
+stage applies every patch in `patches/linux/`.
+
+* Text console: `tty1` shows a login prompt (a USB keyboard works there)
+  until NEP's software is set up (section 7). After that, NEP's touch-screen
+  program (`zlg-hmi`) takes over the display and `tty1`, and the login
+  prompt there is switched off; log in over SSH (section 3).
+* Backlight: `/sys/class/backlight/backlight/brightness`, 0-7.
+* Touch: `/dev/input/by-path/*tsc*` (see `evtest`). It reports raw ADC
+  values, so calibrate it for a GUI (tslib `ts_calibrate`, or a libinput
+  calibration matrix).
+* Beeper: `m6g2c-beep [Hz] [ms] [count]`, e.g. `m6g2c-beep 2500 100 3`. It
+  needs the `input` group or root. The console bell (`printf '\a'` on
+  `tty1`) also beeps, at 2.5 kHz.
+* If the image looks shifted or unstable, flip `pixelclk-active` in the
+  `panel-timing` node. ZLG's value is used, but its 4.1 kernel's LCD driver
+  isn't the same driver.
 
 ## 5c. Power-line modems (NEP MI200E, `/dev/mi200e`)
 
@@ -351,64 +419,6 @@ The driver drives ECSPI1 itself, as NEP's did, so with it on, the plain
 `spidev` (`M6G2C_ENABLE_SPI`) is switched off. `gateway-plc` also
 contains an unused SPI code path for `/dev/spidev0.0`; it isn't needed.
 
-## 5b. Display (Tianma TM043NBH02)
-
-The LCD runs through the i.MX LCD controller's DRM driver (`mxsfb`) and a
-generic `panel-dpi` panel with ZLG's timings: 9 MHz, 480x272. Because the
-panel is wired with 16 data lines, it needs RGB565. `panel-dpi` can't express
-that (as of 6.12 the `data-mapping` property is only implemented for LVDS
-panels), so `patches/linux/0001-...` adds it to `panel-dpi`. Without it the colours would be wrong. The kernel
-stage applies every patch in `patches/linux/`.
-
-* Text console: `tty1` shows a login prompt; a USB keyboard works there.
-* Backlight: `/sys/class/backlight/backlight/brightness`, 0-7.
-* Touch: `/dev/input/by-path/*tsc*` (see `evtest`). It reports raw ADC
-  values, so calibrate it for a GUI (tslib `ts_calibrate`, or a libinput
-  calibration matrix).
-* Beeper: `m6g2c-beep [Hz] [ms] [count]`, e.g. `m6g2c-beep 2500 100 3`. It
-  needs the `input` group or root. The console bell (`printf '\a'` on
-  `tty1`) also beeps, at 2.5 kHz.
-* If the image looks shifted or unstable, flip `pixelclk-active` in the
-  `panel-timing` node. ZLG's value is used, but its 4.1 kernel's LCD driver
-  isn't the same driver.
-
-## 5a. Wi-Fi (TP-Link TL-WN823N USB dongle)
-
-The dongle that ships with the EPC-M6G2C works with the in-kernel
-`rtl8xxxu` driver: v2/v3 (USB ID 2357:0109) use the RTL8192EU chip, v1 the
-RTL8192CU. Its firmware comes from Debian's `firmware-realtek` package. Plug
-it into the USB-A port on the bottom of the Gateway; `lsusb` shows which
-version you have.
-
-Set the network in `local.env` (next to `config.env`; keep it private):
-
-```sh
-: "${WIFI_SSID:=My Network}"
-: "${WIFI_PASSPHRASE:=my passphrase}"
-: "${WIFI_COUNTRY:=US}"
-```
-
-The rootfs stage writes `/etc/wpa_supplicant/wpa_supplicant-wlan0.conf`
-(mode 600). It contains only the derived WPA2 key, not the passphrase. udev
-starts `wpa_supplicant@wlan0` when the dongle appears, and systemd-networkd
-gets an address by DHCP. Without the dongle the boot doesn't wait for it.
-`net.ifnames=0` on the kernel command line keeps the names `eth0` and `wlan0`.
-
-On the board: `iw dev wlan0 link` shows the association, `ip addr show wlan0`
-the address, and `journalctl -u wpa_supplicant@wlan0` any errors. To change
-networks later, edit the config file (`wpa_passphrase "SSID" "pass"` makes the
-`network={}` block), then `sudo systemctl restart wpa_supplicant@wlan0`.
-
-The kernel only trusts the upstream-signed copy of the Wi-Fi regulatory
-database, so the rootfs stage selects `/lib/firmware/regulatory.db-upstream`.
-Otherwise the kernel logs "regulatory.db is malformed" and ignores
-`WIFI_COUNTRY`. Check with `iw reg get`.
-
-WPA2/WPA3 "transition mode" access points accept this WPA2 key. A WPA3-only
-(SAE) network needs the plain passphrase and `key_mgmt=SAE` (with
-`ieee80211w=2`) instead; trixie's wpa_supplicant supports that, but whether
-`rtl8xxxu` does SAE on your dongle is untested.
-
 ## 6. About Debian trixie and Linux 6.12
 
 Debian 13 "trixie" is Debian's current stable release (August 2025), with
@@ -441,7 +451,7 @@ The trixie package set (`systemd-resolved`, `libubootenv-tool`,
 tested buster/6.1 build, use the previous version of this kit rather than
 just changing `DEBIAN_SUITE`.
 
-## 9. Running ZLG's gateway software (NEP) on the new system
+## 7. Running ZLG's gateway software (NEP) on the new system
 
 `board-files/zlg/` (on the board: `/usr/local/share/zlg/`) runs ZLG's
 original programs unchanged, from a copy of the factory root filesystem in
@@ -453,7 +463,7 @@ original programs unchanged, from a copy of the factory root filesystem in
 | `zlg-pctrl` | `gateway-pctrl` | `/usr/local/bin/gateway` |
 | `zlg-mqtt` | `gateway-mqtt-nep` (NEP's cloud) | `/usr/local/bin/gateway`, `plc.sh` |
 | `zlg-hmi` | `gateway-hmi -qws` (touch screen, takes over `tty1`) | `/usr/local/bin/gateway`, `plc.sh` |
-| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 9b; off on the production unit) | `rcS` |
+| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 7b; off on the production unit) | `rcS` |
 | `zlg-cron` | ZLG's crontab (uploads, reports, the 01:00 daily clean) | `ginit.sh` |
 
 Each is restarted 10 s after it stops, which replaces `plc.sh`'s checks.
@@ -510,7 +520,7 @@ systemctl list-units 'zlg*'
 * Only one system talks to the inverters at a time anyway: the board runs
   either the SD card or the NAND.
 
-### 9b. The web interface on Debian's lighttpd and PHP 8.4
+### 7b. The web interface on Debian's lighttpd and PHP 8.4
 
 ZLG's web server (lighttpd + PHP 5.4.12 from 2013, `zlg-httpd`) is no longer maintained. `board-files/zlg/web/` replaces it with Debian's lighttpd and
 PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
@@ -596,7 +606,7 @@ The weather shows on the status page (the bar above the inverter boxes) and
 on the Info page (**Weather** in the menu, `http://<board>/nep/info/index`),
 together with a map of the same location.
 
-## 7. Layout
+## 8. Layout
 
 ```
 build.sh                    stage runner
@@ -608,13 +618,13 @@ scripts/04-image.sh         partitions, filesystems, boot loader -> .img/.img.xz
 board-files/u-boot/         board/zlg/m6g2c, defconfig, config header, U-Boot DTS
 board-files/linux/          kernel DTS, config fragment, drivers/ (MI200E PLC driver)
 board-files/rootfs/         first-boot resize/SSH-key service
-board-files/zlg/            runs ZLG's gateway software in /srv/zlg (section 9)
-board-files/zlg/web/        NEP's web interface on lighttpd + PHP 8.4 (section 9b)
+board-files/zlg/            runs ZLG's gateway software in /srv/zlg (section 7)
+board-files/zlg/web/        NEP's web interface on lighttpd + PHP 8.4 (section 7b)
 tools/                      factory hardware dump, pinctrl decoder, DCD/DDR decoder,
                             watchdog-GPIO finder
 ```
 
-## 8. What has been tested
+## 9. What has been tested
 
 **On the EPC-M6G2C this kit was developed on (the production unit), running
 the trixie image:**
@@ -624,10 +634,10 @@ the trixie image:**
   4a); systemd takes over at about 3.5 s.
 * Hardware: Ethernet, Wi-Fi (TL-WN823N, `rtl8xxxu`), NAND (read-only
   partitions), display, touch, beeper, RTC (holds UTC) and `spidev`.
-* NEP's gateway software from `/srv/zlg` (section 9): inverter data over the
+* NEP's gateway software from `/srv/zlg` (section 7): inverter data over the
   serial PLC module on `/dev/ttymxc1`, the touch-screen HMI, the cron jobs
   and reports, with local-only mode on.
-* The web interface on Debian's lighttpd and PHP 8.4 (section 9b): every
+* The web interface on Debian's lighttpd and PHP 8.4 (section 7b): every
   page compared with ZLG's own server and confirmed in the browser, then
   switched to port 80: status page with live inverter boxes, Energy Output
   charts (Highcharts 13), Alert, Layout including Manage layout and moving

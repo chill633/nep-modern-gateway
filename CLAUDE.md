@@ -15,7 +15,7 @@ Wi-Fi (TL-WN823N, rtl8xxxu), NAND (read-only partitions, BCH strength 4 via
 patches/linux/0001), touch, beeper, RTC (holds UTC), spidev.
 
 NEP's gateway software runs unchanged from a copy of the factory rootfs in
-`/srv/zlg` (board-files/zlg/, README section 9): zlg-chroot.service plus
+`/srv/zlg` (board-files/zlg/, README section 7): zlg-chroot.service plus
 zlg-{plc,pctrl,hmi,httpd,cron}.service. Verified: inverter data, LCD, web
 status page, Today/Hour/Month/Year charts, "Last updated". Local-only mode is
 on (`ZLG_LOCAL_ONLY=1`, no cloud uploads).
@@ -53,7 +53,7 @@ on (`ZLG_LOCAL_ONLY=1`, no cloud uploads).
 
 ## Web interface on Debian's lighttpd + PHP 8.4 (2026-11-06)
 
-board-files/zlg/web/ (README 9b): zlg-web-port (PHP, runs on the board)
+board-files/zlg/web/ (README 7b): zlg-web-port (PHP, runs on the board)
 converts /srv/zlg/root/Gateway/nep -> /srv/zlg/www (CI 2.1.3 -> 3.1.13 with
 CI3's config files + NEP's settings, Ucfirst controllers, tokenizer-based
 count()/implode()/sort()/shmop_read() -> zlg_ compat functions,

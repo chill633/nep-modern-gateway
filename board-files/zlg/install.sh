@@ -4,7 +4,7 @@
 set -eu
 cd "$(dirname "$0")"
 [ -f zlg-time.so ] || {
-	echo "zlg-time.so is missing. Build it on your PC (README section 9):" >&2
+	echo "zlg-time.so is missing. Build it on your PC (README section 7):" >&2
 	echo "  arm-linux-gnueabihf-gcc -O2 -marm -fPIC -shared -nostdlib -nostartfiles -fno-stack-protector -fno-builtin -Wl,--hash-style=both -o zlg/zlg-time.so zlg/zlg-time.c" >&2
 	exit 1
 }
