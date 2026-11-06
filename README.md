@@ -106,7 +106,8 @@ switch under the corner of the LCD display. Change it from NVRAM to SD.
 The SD card slot is hidden under the case, on the side of the board with the
 LCD screen. Open the case and insert the SD card, contacts facing the board.
 The case will not close with an SD card installed. You will need to make a
-small cutout in the case to accommodate the SD card.
+small cutout in the case to accommodate the SD card. You should use a high
+endurance microSD card to ensure longevity.
 
 ---
 
