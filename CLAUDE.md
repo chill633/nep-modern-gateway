@@ -182,6 +182,9 @@ Made on nep-fw-20210303 and merged into nep-fw-20230903:
 - install-web.sh restarts zlg.target when /srv/zlg/opt/php5/bin/php isn't
   the PHP 8.4 wrapper: on a fresh install zlg-chroot starts before PHP 8.4
   is installed, so the cron scripts kept PHP 5 and NEP's dead Yahoo wea.
+  README 7a describes this restart and the firmware check after the board
+  install commands; section 9 records the firmware check and hostname
+  (NEP-xxxxx) on the Old unit.
 - README: firmware 20230903 and the New unit in the top note and in 7a.
 
 ## Repository and access
@@ -211,8 +214,10 @@ Made on nep-fw-20210303 and merged into nep-fw-20230903:
   the restored local pages and cut cloud links), section 7's zlg-httpd row
   and hostname example (NEP-xxxxx / NEP-yyyyy), 7a's "installed and running
   on port 80 on ..." line and its list of when to compare on port 8080
-  (each branch describes its own firmware first), and section 9's 20230903
-  test record. When merging nep-fw-20210303 into nep-fw-20230903,
+  (each branch describes its own firmware first), section 9's 20230903
+  test record, and section 9's line about the shared parts running on the
+  other gateway (nep-fw-20210303 points to the 20230903 branch's README;
+  nep-fw-20230903 points to the start of its own section 9). When merging nep-fw-20210303 into nep-fw-20230903,
   keep nep-fw-20230903's wording there (the top note conflicted once,
   2026-11-06), and check that board-files/zlg/nep-firmware still says
   20230903.
