@@ -523,7 +523,9 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
 * `zlg-web-port` converts NEP's app on the board, from the copy in
   `/srv/zlg` into `/srv/zlg/www` (NEP's code is never part of this kit):
   CodeIgniter 2.1.3 -> 3.1.13, Debian's jQuery 3 and jQuery UI 1.13 with
-  jQuery Migrate, PHP 8 fixes (null-safe `count()` and friends, zeros instead
+  jQuery Migrate, Highcharts 2.3.3 -> 13.1.1 (free for personal use; NEP's
+  chart look kept by `js/zlg-highcharts.js`), simpletooltip -> jQuery UI's
+  tooltip, Modernizr dropped, PHP 8 fixes (null-safe `count()` and friends, zeros instead
   of a failed page while `gateway-plc` restarts). It leaves out
   `controllers/proxy.php` (encrypted with `php_screw`, PHP 5 only), a dead `status2.php`, and makes
   `home/info`, `home/show` and `maildebug` unreachable.
@@ -531,6 +533,9 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   shifted clock (`zlg-time.so`, which now also covers Debian 13's 64-bit
   time calls). `zlg-web` is lighttpd in front of it.
 * Errors from NEP's code under PHP 8 go to `journalctl -u zlg-web-fpm`.
+* NEP's own copies of the replaced libraries (jQuery 1.6-1.9, jQuery UI 1.8
+  and 1.9, Highcharts 2, simpletooltip, Modernizr, poshytip) are still in
+  `nep/static/js/` but lighttpd refuses them (403), so no page can load them.
 * `misetup/` (the inverter grid-profile tool) is not served. ZLG's server serves it until you switch.
 
 Fetch the open-source parts on the PC (the rootfs stage does it too), then

@@ -84,5 +84,9 @@ systemctl restart zlg-web-fpm.service zlg-web.service
 port=$(sed -n 's/^ZLG_WEB_PORT=//p' /etc/default/zlg)
 ip=$(hostname -I 2>/dev/null | cut -d' ' -f1)
 echo
-echo "Done: http://${ip:-<board>}:${port}/ (ZLG's server stays on port 80)."
-echo "When it looks right:  sudo sh $0 --switch"
+if [ "$port" = 80 ]; then
+	echo "Done: http://${ip:-<board>}/ (the new server; ZLG's stays off)."
+else
+	echo "Done: http://${ip:-<board>}:${port}/ (ZLG's server stays on port 80)."
+	echo "When it looks right:  sudo sh $0 --switch"
+fi

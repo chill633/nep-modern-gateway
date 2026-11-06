@@ -99,8 +99,19 @@ files identical to PHP 5's apart from timestamps; gene.sh reports OK.
 wea queries Yahoo YQL (shut down 2019), so the weather was already empty.
 install.sh no longer re-enables zlg-httpd once ZLG_WEB_PORT=80.
 
-Open: Highcharts 2.x and the old jQuery plugins (masonry, simpletooltip,
-poshytip); perhaps a working weather source for wea.
+Front-end libraries (2026-11-06): Highcharts 13.1.1 (fetch-deps.sh, npm,
+pinned) + js/zlg-highcharts.js (24-hour axis labels as Highcharts 2 did;
+served at /zlg-web/local/); simpletooltip -> jQuery UI .tooltip() with
+escaped titles keeping <br/>; Modernizr removed (no CSS used it); masonry JS,
+poshytip and infinitescroll were never loaded. lighttpd 403s NEP's copies of
+all replaced libraries. Only day_view uses Highcharts; status4/status3 views
+aren't loaded by any controller.
+
+Browser testing: headless Firefox (snap) driven over Marionette (a small
+Python client; profile under ~/snap/firefox/common), probing
+Highcharts.charts and jQuery UI widget instances, plus screenshots.
+
+Open: perhaps a working weather source for wea (Yahoo YQL is gone).
 
 ## Working with the user
 
