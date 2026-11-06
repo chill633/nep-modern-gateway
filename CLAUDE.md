@@ -62,6 +62,11 @@ count()/implode()/sort()/shmop_read() -> zlg_ compat functions,
 port ZLG_WEB_PORT, 8080 until install-web.sh --switch). Deps pinned in
 fetch-deps.sh (deps/ is git-ignored).
 
+base_url must be a full URL (built from HTTP_HOST in config.php): NEP calls
+redirect(base_url()."..."), and CI3's redirect() prepends the base again to
+anything without "://" (a relative '/nep/' broke Manage layout, login and
+settings redirects with 404s).
+
 Findings: controllers/proxy.php is php_screw-encrypted (dropped);
 status2.php declares class Status (dead); misetup is not served. zlg-time.so needed __clock_gettime64 /
 __time64 / __gettimeofday64 for Debian 13 armhf programs.

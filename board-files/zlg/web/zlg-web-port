@@ -365,7 +365,12 @@ foreach (['controllers', 'models', 'libraries', 'views'] as $d) {
 /* config: NEP's settings on CI3's files */
 $cfg = file_get_contents("$A/config/config.php");
 foreach ([
-	'base_url'		=> "'/nep/'",	/* works on any host and port */
+	/* a full URL, as CodeIgniter 2 had it: NEP's code redirects with
+	   redirect(base_url() . "..."), which CodeIgniter 3 treats as a path
+	   (adding the base again) unless it starts with http://. Built from
+	   the address the browser used, so any host name or port works. */
+	'base_url'		=> "((!empty(\$_SERVER['HTTPS']) && \$_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . " .
+				   "(preg_match('/^[A-Za-z0-9.:\\[\\]-]+\$/', \$_SERVER['HTTP_HOST'] ?? '') ? \$_SERVER['HTTP_HOST'] : (\$_SERVER['SERVER_ADDR'] ?? 'localhost')) . '/nep/'",
 	'index_page'		=> "''",	/* lighttpd rewrites /nep/x to index.php */
 	'language'		=> "'english'",
 	'sess_driver'		=> "'files'",
