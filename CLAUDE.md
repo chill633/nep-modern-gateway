@@ -212,12 +212,15 @@ building without NAND (M6G2C_ENABLE_NAND=0). zlg-import from the NAND stays.
 - Branches per NEP firmware major version (`major=` under [version] in
   /root/Gateway/gateway.cfg): **nep-fw-20210303** (default; the "Old"
   production unit, minor 03, local web interface works; renamed from
-  claude/m6g2c-trixie-kit) and **nep-fw-20230903** (the "New" unit, NEP
-  disabled the local web interface; work in progress). board-files/zlg/
-  nep-firmware holds the branch's version; nep-firmware.sh's nep_fw_check
-  runs in zlg-import (NAND's gateway.cfg) and install-web.sh (the copy's),
-  --any-firmware skips it. Fixes to the shared parts (U-Boot, kernel,
-  rootfs, watchdog, Wi-Fi) go to both branches.
+  claude/m6g2c-trixie-kit) and **nep-fw-20230903** (the "New" unit; NEP
+  hides its local web interface, which the kit brings back). The New unit
+  runs nep-fw-20230903 since 2026-11-06: SD system debian@192.168.1.239,
+  hostname NEP-yyyyy, web interface on port 80, local-only; details in that
+  branch's CLAUDE.md. board-files/zlg/nep-firmware holds the branch's
+  version; nep-firmware.sh's nep_fw_check runs in zlg-import (NAND's
+  gateway.cfg) and install-web.sh (the copy's), --any-firmware skips it.
+  Fixes to the shared parts (U-Boot, kernel, rootfs, watchdog, Wi-Fi, the
+  zlg kit) are made on nep-fw-20210303 and merged into nep-fw-20230903.
 - The board password isn't stored anywhere; ask the user for it (they plan
   to change it) or have them run board-side commands.
 
