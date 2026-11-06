@@ -249,7 +249,19 @@ Made on nep-fw-20210303 and merged into nep-fw-20230903:
 - Passwords aren't stored in the repository. The user gives them per
   session (SD systems: user debian; the New unit's factory system: root);
   keep them only in the session scratch folder and delete them when asked.
-  The user plans to change them at the end of the project.
+  The user plans to change them at the end of the project. On 2026-11-06
+  all passwords and the scratch folders (copies of both units' software,
+  including /etc/shadow and SSH host keys, the qemu test setup with NEP's
+  pages and the Old unit's data, screenshots) were deleted at the user's
+  request: ask for the passwords again before working on a board.
+- Local files outside the repository, in ~/Working: m6g2c-trixie/ (the
+  build tree; out/m6g2c-debian-trixie-armhf.img(.xz) from 2026-11-05, used
+  for both units' SD cards), zlg-migrate.tar.gz (the last board bundle
+  built from the checkout) and zlg-nep.tar.gz (NEP's web bundle from the
+  Old unit; moved out of the repository folder, the only copy). The
+  repository folder holds no vendor files; zlg-*.tar.gz is git-ignored
+  anyway. Recreating a board bundle: `tar czf ../zlg-migrate.tar.gz -C
+  board-files zlg` after fetch-deps.sh and building zlg-time.so.
 
 ## Working with the user
 
