@@ -181,7 +181,9 @@ building without NAND (M6G2C_ENABLE_NAND=0). zlg-import from the NAND stays.
 
 - Hardware access is only through the user: they run commands on the board
   and paste output; serial console is output-only (TX not connected).
-- Board: `debian@m6g2c`, 192.168.1.183 on Wi-Fi.
+- Board: `debian@192.168.1.183` on Wi-Fi. Hostname `m6g2c` until zlg-chroot
+  sets `NEP-<last 5 of SN>` (NEP-xxxxx: the last five characters of the serial;
+  set_hostname, ZLG_HOSTNAME=0 to keep it).
 - `local.env` holds the Wi-Fi credentials; it is git-ignored. Keep it out of
   commits and shared files.
 - Earlier tools: tools/decode-pinctrl.py, gpmi-raw-analyze.py, wpa-conf.py.

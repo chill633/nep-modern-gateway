@@ -528,6 +528,12 @@ systemctl list-units 'zlg*'
   ```
 * The web pages' "Last updated" subtracted China's 8-hour offset; `zlg-chroot`
   changes that line in the copy so it shows local time.
+* **The hostname.** When the services start, `zlg-chroot` names the board
+  `NEP-` and the last five characters of the gateway's serial number (the
+  `SN=` line in `/root/Gateway/sn`), for example `NEP-xxxxx`, and updates
+  `/etc/hostname` and `/etc/hosts` to match. Until then it is `m6g2c`
+  (`HOSTNAME_TARGET` in `config.env`). `ZLG_HOSTNAME=0` in
+  `/etc/default/zlg` keeps the hostname as it is.
 * `sudo zlg-chroot shell` opens a shell inside the copy with ZLG's environment.
 * `ZLG_LOCAL_ONLY=1` in `/etc/default/zlg` drops the cron jobs that upload to
   NEP's cloud (`my_nsync` -> `php remote`, nepviewer.com). Data collection,
@@ -577,7 +583,7 @@ arm-linux-gnueabihf-gcc -O2 -marm -fPIC -shared -nostdlib -nostartfiles \
     -fno-stack-protector -fno-builtin -Wl,--hash-style=both \
     -o board-files/zlg/zlg-time.so board-files/zlg/zlg-time.c
 tar czf zlg-migrate.tar.gz -C board-files zlg
-scp zlg-migrate.tar.gz debian@m6g2c:/tmp/
+scp zlg-migrate.tar.gz debian@<board>:/tmp/     # the board's IP address or hostname
 ```
 
 On the board:
