@@ -4,6 +4,7 @@
 #
 #   sudo zlg-import            first copy
 #   sudo zlg-import --force    copy again, replacing /srv/zlg (its data too!)
+#   --any-firmware             skip the NEP firmware check (nep-firmware.sh)
 #
 # The NAND is attached and mounted read-only; nothing is written to it.
 set -eu
@@ -11,7 +12,17 @@ set -eu
 ROOT=/srv/zlg
 MNT=/run/zlg-nand
 FORCE=0
-[ "${1:-}" = --force ] && FORCE=1
+ANYFW=0
+for a in "$@"; do
+	case "$a" in
+	--force) FORCE=1 ;;
+	--any-firmware) ANYFW=1 ;;
+	*) echo "zlg-import: unknown option $a" >&2; exit 1 ;;
+	esac
+done
+SHARE=/usr/local/share/zlg
+# shellcheck disable=SC1091
+. "$SHARE/nep-firmware.sh"
 
 die() { echo "zlg-import: $*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || die "run as root"
@@ -43,6 +54,7 @@ mountpoint -q "$MNT" || mount -t ubifs -o ro "$UBI:rootfs" "$MNT"
 trap 'umount "$MNT" 2>/dev/null || true' EXIT
 
 [ -x "$MNT/root/Gateway/gateway-plc" ] || die "$MNT doesn't look like ZLG's gateway system"
+nep_fw_check "$MNT/root/Gateway/gateway.cfg" "$SHARE/nep-firmware" "$ANYFW"
 
 if [ -e "$ROOT" ]; then
 	# never delete through a live bind mount

@@ -174,8 +174,17 @@ building without NAND (M6G2C_ENABLE_NAND=0). zlg-import from the NAND stays.
 ## Repository and access
 
 - GitHub: chill633/nep-modern-gateway (private; renamed from chill633/claude,
-  which redirects), default branch claude/m6g2c-trixie-kit. Local checkout:
-  ~/Working/nep-modern-gateway. gh is installed and logged in.
+  which redirects). Local checkout: ~/Working/nep-modern-gateway. gh is
+  installed and logged in.
+- Branches per NEP firmware major version (`major=` under [version] in
+  /root/Gateway/gateway.cfg): **nep-fw-20210303** (default; the "Old"
+  production unit, minor 03, local web interface works; renamed from
+  claude/m6g2c-trixie-kit) and **nep-fw-20230903** (the "New" unit, NEP
+  disabled the local web interface; work in progress). board-files/zlg/
+  nep-firmware holds the branch's version; nep-firmware.sh's nep_fw_check
+  runs in zlg-import (NAND's gateway.cfg) and install-web.sh (the copy's),
+  --any-firmware skips it. Fixes to the shared parts (U-Boot, kernel,
+  rootfs, watchdog, Wi-Fi) go to both branches.
 - The board password isn't stored anywhere; ask the user for it (they plan
   to change it) or have them run board-side commands.
 

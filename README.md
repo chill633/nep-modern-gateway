@@ -35,6 +35,14 @@ Everything is built from source: mainline **U-Boot 2024.01** (SPL + U-Boot,
 with a new `zlg_m6g2c` board port), **Linux 6.12 LTS** with an M6G2C device
 tree, and a **Debian 13 "trixie" armhf** root filesystem.
 
+> **NEP firmware 20210303.** This branch, `nep-fw-20210303`, is for gateways
+> running NEP firmware major version **20210303** (`major=` in the
+> `[version]` section of `/root/Gateway/gateway.cfg`), whose local web
+> interface still works. Gateways with firmware **20230903**, where NEP
+> disabled the local web interface, get their own branch, `nep-fw-20230903`.
+> `zlg-import` and `install-web.sh` check the version and stop on a
+> mismatch (section 7).
+
 > **Status:** this image runs in production on the EPC-M6G2C it was
 > developed on, together with NEP's gateway software and the modernised web
 > interface (section 7). The hardware and the software have been tested on
@@ -534,6 +542,11 @@ systemctl list-units 'zlg*'
   `/etc/hostname` and `/etc/hosts` to match. Until then it is `m6g2c`
   (`HOSTNAME_TARGET` in `config.env`). `ZLG_HOSTNAME=0` in
   `/etc/default/zlg` keeps the hostname as it is.
+* **The NEP firmware version.** This kit is for NEP firmware 20210303
+  (`board-files/zlg/nep-firmware`). `zlg-import` reads `major=` from the
+  NAND's `/root/Gateway/gateway.cfg`, and `install-web.sh` from the copy's,
+  and both stop if the gateway runs another version, naming the branch to
+  use instead. `--any-firmware` skips the check.
 * `sudo zlg-chroot shell` opens a shell inside the copy with ZLG's environment.
 * `ZLG_LOCAL_ONLY=1` in `/etc/default/zlg` drops the cron jobs that upload to
   NEP's cloud (`my_nsync` -> `php remote`, nepviewer.com). Data collection,

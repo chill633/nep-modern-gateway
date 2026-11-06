@@ -6,6 +6,7 @@
 #   sudo sh install-web.sh --switch   the new server takes port 80 (ZLG's off)
 #   sudo sh install-web.sh --revert   back to ZLG's server on port 80
 #   sudo sh install-web.sh --rebuild  only re-run zlg-web-port
+#   --any-firmware                    skip the NEP firmware check
 #
 # Needs zlg/install.sh and zlg-import done first (README section 7), and
 # internet access for apt. NEP's code is converted on the board by
@@ -27,7 +28,16 @@ set_port() {	# set_port N: ZLG_WEB_PORT in /etc/default/zlg
 	fi
 }
 
-case "${1:-}" in
+ANYFW=0
+MODE=
+for a in "$@"; do
+	case "$a" in
+	--any-firmware) ANYFW=1 ;;
+	*) [ -z "$MODE" ] || die "one option at a time: $MODE, $a"; MODE=$a ;;
+	esac
+done
+
+case "$MODE" in
 --switch)
 	systemctl is-active -q zlg-web.service || die "zlg-web isn't running; install first"
 	systemctl disable --now zlg-httpd.service
@@ -48,11 +58,14 @@ case "${1:-}" in
 	systemctl reload zlg-web-fpm.service 2>/dev/null || true
 	exit 0 ;;
 "") ;;
-*) die "unknown option $1" ;;
+*) die "unknown option $MODE" ;;
 esac
 
 [ -x /srv/zlg/root/Gateway/gateway-plc ] || die "/srv/zlg is empty: run zlg-import first"
 [ -x /usr/local/sbin/zlg-chroot ] || die "run zlg/install.sh first"
+# shellcheck disable=SC1091
+. "$HERE/../nep-firmware.sh"
+nep_fw_check /srv/zlg/root/Gateway/gateway.cfg "$HERE/../nep-firmware" "$ANYFW"
 [ -f deps/ci3/system/core/CodeIgniter.php ] ||
 	die "deps/ is missing: run board-files/zlg/web/fetch-deps.sh on the PC first"
 

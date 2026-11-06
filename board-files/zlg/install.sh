@@ -9,6 +9,8 @@ cd "$(dirname "$0")"
 	exit 1
 }
 install -m 755 zlg-import zlg-chroot /usr/local/sbin/
+install -D -m 644 nep-firmware /usr/local/share/zlg/nep-firmware
+install -D -m 644 nep-firmware.sh /usr/local/share/zlg/nep-firmware.sh
 install -D -m 644 zlg-time.so /usr/local/lib/zlg/zlg-time.so
 install -D -m 644 zlg-weather.php /usr/local/lib/zlg/zlg-weather.php
 [ -e /etc/default/zlg ] || install -m 644 zlg.default /etc/default/zlg
