@@ -119,7 +119,12 @@ ZLG_WEATHER_LAT/LON; the factory value is near Jinan, China. The board has
 ZLG_WEATHER_LAT / ZLG_WEATHER_LON (the user's location) in /etc/default/zlg.
 zlg-web-port restores the status page's weather line (adds #wt to NEP's empty
 ui-state-highlight bar, uncomments uw()); the Info page (info/index) shows it
-too, linked as "Weather" after Layout in the menu (added by the port). web/Googlemaps.php replaces NEP's Google Static Maps
+too, linked as "Weather" after Layout in the menu (added by the port). The
+port adds lang_navi_Weather and lang_weather_map_today to NEP's english,
+japanese and chinese nep_lang.php (keeping CRLF/BOM) and points the Info
+page's hard-coded English labels at NEP's lang_weather_map_* keys. The
+language follows engineer.cfg "language" (0 en, 1 ja, 2 zh), read by
+status/index into the session. web/Googlemaps.php replaces NEP's Google Static Maps
 library (maps.google.cn, no key) with an OpenStreetMap iframe, same API,
 position from weather.conf first. The port lints application files with
 php -l (--no-lint for qemu tests); it caught nothing before because a
