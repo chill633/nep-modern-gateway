@@ -1,6 +1,28 @@
 # Debian trixie (armhf) SD-card image for the NEP BDG-256 Gateway (ZLG M6G2C-256LI)
 
-Build kit that produces a bootable SD-card image for the ZLG **M6G2C-256LI**
+The NEP BDG-256 solar gateway collects the readings of NEP's microinverters
+and shows them on its touch screen and web pages. As shipped, it ran ZLG's
+2015-era embedded Linux (Linux 4.1, U-Boot 2015.04), with an old lighttpd
+and PHP 5.4 (2013) web server and JavaScript libraries from 2012 (jQuery 1.8,
+Highcharts 2), none of which get security updates any more. This kit moves the gateway
+to a modern, supported system: **Debian 13 "trixie"** with **Linux 6.12 LTS**
+and **U-Boot 2024.01**, booting from an SD card and leaving the factory
+system on the built-in NAND untouched. NEP's own gateway programs keep
+running unchanged, from a copy of the factory software, so the inverters,
+the touch screen and the collected history carry on as before.
+
+The web interface now runs on Debian's **lighttpd** and **PHP 8.4**, kept
+patched by `apt`: NEP's pages were converted from CodeIgniter 2 to
+**CodeIgniter 3**, and their JavaScript moved to Debian's **jQuery 3** and
+**jQuery UI**, with **Highcharts 13** for the charts. NEP's own command-line
+PHP scripts run on PHP 8.4 too. Along the way, two features that had stopped working were restored: the **weather**, whose
+Yahoo service closed in 2019, now comes from Open-Meteo for the gateway's
+location, and the **map** on the Weather page, which showed a broken Google
+Maps image, now shows OpenStreetMap.
+
+## The build kit
+
+The kit produces a bootable SD-card image for the ZLG **M6G2C-256LI**
 core module:
 
 | Part | Device | Notes |
