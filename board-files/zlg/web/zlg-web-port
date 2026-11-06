@@ -31,7 +31,8 @@
  *    Highcharts 2.3.3 -> 13; simpletooltip -> jQuery UI's tooltip;
  *    Modernizr dropped
  *  - "Last updated": no China offset (see zlg-chroot)
- *  - home/info, home/show (a database demo) and maildebug are
+ *  - home/info, home/show (a database demo), maildebug and
+ *    report/send are
  *    not reachable
  *  - files encrypted with php_screw (controllers/proxy.php) can't run on PHP 8 and are left out
  */
@@ -398,11 +399,13 @@ put("$A/config/autoload.php", $auto);
 $routes = file_get_contents("$A/config/routes.php");
 $routes = ci_set($routes, 'route', 'default_controller', "'status'");
 $routes = ci_set($routes, 'route', 'translate_uri_dashes', 'FALSE');
-/* not reachable from the network: NEP's diagnostic and test pages */
+/* not reachable from the network: NEP's diagnostic and test pages;
+   case-insensitive, as /nep/Report/SEND reaches the same method */
 $routes .= "\n/* zlg-web-port: NEP's diagnostic and test pages are disabled */\n" .
-	   "\$route['home/info(/.*)?'] = 'status';\n" .
-	   "\$route['maildebug(/.*)?'] = 'status';\n" .
-	   "\$route['home/show(/.*)?'] = 'status';\n";
+	   "\$route['(?i)home/info(/.*)?'] = 'status';\n" .
+	   "\$route['(?i)maildebug(/.*)?'] = 'status';\n" .
+	   "\$route['(?i)report/send(/.*)?'] = 'status';\n" .
+	   "\$route['(?i)home/show(/.*)?'] = 'status';\n";
 put("$A/config/routes.php", $routes);
 
 /* document root: / redirects to the status page, as NEP's index.php did */
