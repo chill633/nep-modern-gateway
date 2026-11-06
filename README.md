@@ -589,7 +589,7 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   status page's weather line back on, PHP 8 fixes (null-safe `count()` and friends, zeros instead
   of a failed page while `gateway-plc` restarts). It leaves out
   `controllers/proxy.php` (encrypted with `php_screw`, PHP 5 only), a dead `status2.php`, and makes
-  `home/info`, `home/show` and `maildebug` unreachable.
+  `home/info`, `home/show`, `maildebug` and `report/send` unreachable.
 * `zlg-web-fpm` runs PHP 8.4 chrooted into `/srv/zlg` as `www-data`, with the
   shifted clock (`zlg-time.so`, which now also covers Debian 13's 64-bit
   time calls). `zlg-web` is lighttpd in front of it.
