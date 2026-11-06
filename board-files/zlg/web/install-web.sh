@@ -94,6 +94,13 @@ systemctl daemon-reload
 systemctl add-wants zlg.target zlg-web-fpm.service
 systemctl add-wants zlg.target zlg-web.service
 systemctl restart zlg-web-fpm.service zlg-web.service
+# zlg-chroot switches ZLG's command-line PHP (cron: php proxy, wea, ...) to
+# PHP 8.4 only if PHP 8.4 was installed when it started; on a fresh install
+# it wasn't, so restart ZLG's services once
+if ! mountpoint -q /srv/zlg/opt/php5/bin/php 2>/dev/null; then
+	echo "Restarting ZLG's services so their PHP scripts use PHP 8.4 ..."
+	systemctl restart zlg.target
+fi
 port=$(sed -n 's/^ZLG_WEB_PORT=//p' /etc/default/zlg)
 ip=$(hostname -I 2>/dev/null | cut -d' ' -f1)
 echo
