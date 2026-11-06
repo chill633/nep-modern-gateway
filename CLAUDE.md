@@ -89,9 +89,18 @@ Problems found on the board, now fixed in the kit:
 Panels 9 and 10 (one inverter) read 0 with status 8000: that
 inverter is physically unplugged, not a fault.
 
-Open: the PHP 5 CLI cron scripts (proxy, wea, report pages via gene.sh),
-then Highcharts 2.x and the old jQuery plugins (masonry, simpletooltip,
-poshytip).
+ZLG's command-line PHP runs on Debian's PHP 8.4 too (zlg-chroot
+php84_setup): host /usr bind-mounted ro at /srv/zlg/m6g2c/host/usr, a
+wrapper (own ld-linux + --library-path) bind-mounted over
+/opt/php5/bin/php, one generated ini (/m6g2c/php84.ini; Debian's conf.d
+symlinks don't resolve inside). serialize_precision=14 (PHP 5's float
+output; also in php-fpm.conf). Verified on the board: proxy's 127 output
+files identical to PHP 5's apart from timestamps; gene.sh reports OK.
+wea queries Yahoo YQL (shut down 2019), so the weather was already empty.
+install.sh no longer re-enables zlg-httpd once ZLG_WEB_PORT=80.
+
+Open: Highcharts 2.x and the old jQuery plugins (masonry, simpletooltip,
+poshytip); perhaps a working weather source for wea.
 
 ## Working with the user
 

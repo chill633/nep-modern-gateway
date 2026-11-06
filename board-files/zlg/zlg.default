@@ -11,3 +11,7 @@
 # pages (fed by gdata.sh -> lsync -> php proxy, all local) and the reports
 # are unaffected.
 ZLG_LOCAL_ONLY=0
+
+# 1: ZLG's command-line PHP (the cron jobs' php proxy, php wea, ...) runs on
+# Debian's PHP 8.4; 0: on ZLG's PHP 5.4 (zlg-chroot)
+ZLG_PHP84_CLI=1

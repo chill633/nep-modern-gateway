@@ -150,6 +150,8 @@ start() {
 	rl="$ROOT/root/Gateway/nep/application/controllers/realdata.php"
 	[ -f "$rl" ] && sed -i 's/time() \* 1000+28800000;/time() * 1000;/' "$rl"
 
+	php84_setup
+
 	# rcS
 	env_run /bin/sh -c 'mkdir -p /var/empty /var/log /var/lock /var/run /var/tmp /var/lib/dbus'
 	[ -e /dev/ttySAC0 ] || ln -s ttymxc0 /dev/ttySAC0
@@ -188,8 +190,56 @@ start() {
 	echo "zlg-chroot: ready (clock offset $(cat /run/zlg/utcoffset) s)"
 }
 
+# Debian's PHP 8.4 for ZLG's command-line PHP (cron: php proxy, php wea,
+# ...), in place of ZLG's PHP 5.4. The host's /usr is mounted read-only at
+# /m6g2c/host/usr (so apt keeps it patched) and run there with its own
+# dynamic loader and libraries; a wrapper is mounted over
+# /opt/php5/bin/php, so NEP's cron lines and scripts stay unchanged.
+# ZLG_PHP84_CLI=0 in /etc/default/zlg keeps ZLG's PHP 5.
+PHP5=/opt/php5/bin/php
+
+php84_setup() {
+	[ "${ZLG_PHP84_CLI:-1}" = 1 ] || return 0
+	[ -x /usr/bin/php8.4 ] || return 0
+	[ -f "$ROOT$PHP5" ] && [ ! -L "$ROOT$PHP5" ] || return 0
+	mnt /m6g2c/host/usr --bind -o ro /usr
+
+	# one ini file: Debian's CLI settings and enabled extensions (its
+	# conf.d holds absolute symlinks, which don't resolve inside)
+	ini="$ROOT/m6g2c/php84.ini"
+	base=/etc/php/8.4/cli/php.ini
+	[ -f "$base" ] || base=/usr/lib/php/8.4/php.ini-production.cli
+	extdir=$(/usr/bin/php8.4 -n -r 'echo PHP_EXTENSION_DIR;')
+	{
+		cat "$base"
+		cat /etc/php/8.4/cli/conf.d/*.ini 2>/dev/null
+		echo
+		echo "; zlg-chroot: inside /srv/zlg"
+		echo "extension_dir = /m6g2c/host$extdir"
+		echo "date.timezone = UTC"
+		echo "; floats in json_encode() as PHP 5 wrote them (0.295, not"
+		echo "; 0.29500000000000004)"
+		echo "serialize_precision = 14"
+		echo "display_errors = stderr"
+		echo "error_reporting = E_ALL & ~E_DEPRECATED & ~E_NOTICE & ~E_WARNING"
+	} > "$ini"
+
+	cat > "$ROOT/m6g2c/php84" <<-'EOF2'
+	#!/bin/sh
+	# Debian's PHP 8.4 (zlg-chroot), mounted over ZLG's /opt/php5/bin/php
+	H=/m6g2c/host/usr
+	A=$H/lib/arm-linux-gnueabihf
+	export GCONV_PATH=$A/gconv PHP_INI_SCAN_DIR=
+	exec $H/lib/ld-linux-armhf.so.3 --library-path $A:$H/lib \
+		$H/bin/php8.4 -c /m6g2c/php84.ini "$@"
+	EOF2
+	chmod 755 "$ROOT/m6g2c/php84"
+	mountpoint -q "$ROOT$PHP5" || mount --bind "$ROOT/m6g2c/php84" "$ROOT$PHP5"
+}
+
 stop() {
-	for t in /m6g2c/run /usr/share/zoneinfo /run /var /tmp /dev/shm /dev/pts /dev /sys /proc; do
+	mountpoint -q "$ROOT$PHP5" 2>/dev/null && umount -l "$ROOT$PHP5"
+	for t in /m6g2c/host/usr /m6g2c/run /usr/share/zoneinfo /run /var /tmp /dev/shm /dev/pts /dev /sys /proc; do
 		[ -L "$ROOT$t" ] && continue
 		mountpoint -q "$ROOT$t" && umount -l "$ROOT$t"
 	done

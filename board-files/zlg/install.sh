@@ -15,9 +15,14 @@ install -m 644 systemd/*.service systemd/*.target systemd/*.path systemd/*.timer
 systemctl daemon-reload
 # the programs ZLG's system runs (zlg.target's Wants)
 for u in zlg-plc.service zlg-mqtt.service zlg-pctrl.service zlg-hmi.service \
-	 zlg-httpd.service zlg-cron.service zlg-restart.path zlg-offset.timer; do
+	 zlg-cron.service zlg-restart.path zlg-offset.timer; do
 	systemctl add-wants zlg.target "$u"
 done
+# ZLG's own web server, unless the PHP 8.4 one has replaced it on port 80
+# (web/install-web.sh --switch)
+if ! grep -q '^ZLG_WEB_PORT=80$' /etc/default/zlg 2>/dev/null; then
+	systemctl add-wants zlg.target zlg-httpd.service
+fi
 # gateway-hmi uses the display and tty1
 systemctl mask getty@tty1.service
 systemctl daemon-reload

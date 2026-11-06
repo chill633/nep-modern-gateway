@@ -559,10 +559,13 @@ matches, `sudo sh /usr/local/share/zlg/web/install-web.sh --switch` moves the
 new server to port 80 and stops ZLG's; `--revert` goes back. After
 `zlg-import`, re-run `install-web.sh --rebuild`.
 
-Still on PHP 5 after the switch: the cron jobs' command-line scripts inside
-`/srv/zlg` (`php proxy`, which writes the status boxes, `php wea`, the
-reports). They aren't reachable from the network; moving them is the next
-step.
+ZLG's command-line PHP (the cron jobs' `php proxy`, which writes the status
+boxes, `php wea` and the report scripts) also runs on Debian's PHP 8.4:
+`zlg-chroot` mounts the host's `/usr` read-only at `/m6g2c/host/usr` inside
+the copy and mounts a wrapper over `/opt/php5/bin/php`, which starts
+`php8.4` with its own dynamic loader and libraries. NEP's cron lines and
+scripts stay unchanged, and apt keeps the PHP patched. `ZLG_PHP84_CLI=0` in
+`/etc/default/zlg` goes back to ZLG's PHP 5.4.
 
 ## 7. Layout
 
