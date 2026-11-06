@@ -15,7 +15,11 @@ The web interface now runs on Debian's **lighttpd** and **PHP 8.4**, kept
 patched by `apt`: NEP's pages were converted from CodeIgniter 2 to
 **CodeIgniter 3**, and their JavaScript moved to Debian's **jQuery 3** and
 **jQuery UI**, with **Highcharts 13** for the charts. NEP's own command-line
-PHP scripts run on PHP 8.4 too. Along the way, two features that had stopped working were restored: the **weather**, whose
+PHP scripts run on PHP 8.4 too. On firmware 20230903, where NEP had switched
+the gateway's local web pages off, they are back. Local-only mode cuts the
+gateway's links to NEP's cloud, including that firmware's MQTT connection.
+Along the way, two features that had
+stopped working were restored: the **weather**, whose
 Yahoo service closed in 2019, now comes from Open-Meteo for the gateway's
 location, and the **map** on the Weather page, which showed a broken Google
 Maps image, now shows OpenStreetMap.
@@ -499,7 +503,7 @@ original programs unchanged, from a copy of the factory root filesystem in
 | `zlg-pctrl` | `gateway-pctrl` | `/usr/local/bin/gateway` |
 | `zlg-mqtt` | `gateway-mqtt-nep` (NEP's cloud) | `/usr/local/bin/gateway`, `plc.sh` |
 | `zlg-hmi` | `gateway-hmi -qws` (touch screen, takes over `tty1`) | `/usr/local/bin/gateway`, `plc.sh` |
-| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 7a; off on the production unit) | `rcS` |
+| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 7a; on firmware 20230903 NEP's boot script hides its pages, so it answers 403; off once switched) | `rcS` |
 | `zlg-cron` | ZLG's crontab (uploads, reports, the 01:00 daily clean) | `ginit.sh` |
 
 Each is restarted 10 s after it stops, which replaces `plc.sh`'s checks.
@@ -544,7 +548,7 @@ systemctl list-units 'zlg*'
   changes that line in the copy so it shows local time.
 * **The hostname.** When the services start, `zlg-chroot` names the board
   `NEP-` and the last five characters of the gateway's serial number (the
-  `SN=` line in `/root/Gateway/sn`), for example `NEP-xxxxx`, and updates
+  `SN=` line in `/root/Gateway/sn`), for example `NEP-yyyyy`, and updates
   `/etc/hostname` and `/etc/hosts` to match. Until then it is `m6g2c`
   (`HOSTNAME_TARGET` in `config.env`). `ZLG_HOSTNAME=0` in
   `/etc/default/zlg` keeps the hostname as it is.
@@ -595,7 +599,7 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   `nep/static/js/` but lighttpd refuses them (403), so no page can load them.
 * `misetup/` (the inverter grid-profile tool) is not served. ZLG's server, which serves it, is switched off.
 
-This is installed and running on port 80 on the production unit. The steps
+This is installed and running on port 80 on the 20230903 gateway. The steps
 below are for a fresh install or an update. Fetch the open-source parts on
 the PC (the rootfs stage does it too), then copy the kit to the board:
 
