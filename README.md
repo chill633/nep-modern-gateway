@@ -103,6 +103,11 @@ battery-backed PCF85063 RTC is used as the system clock (`/dev/rtc0`).
 The i.MX6UL must be told to boot from uSDHC1. On the BDG-256 there is a
 switch under the corner of the LCD display. Change it from NVRAM to SD.
 
+The SD card slot is hidden under the case, on the side of the board with the
+LCD screen. Open the case and insert the SD card, contacts facing the board.
+The case will not close with an SD card installed. You will need to make a
+small cutout in the case to accommodate the SD card.
+
 ---
 
 ## 4. Board-specific details (confirmed on the EPC-M6G2C)
