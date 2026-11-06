@@ -13,9 +13,12 @@ Everything is built from source: mainline **U-Boot 2024.01** (SPL + U-Boot,
 with a new `zlg_m6g2c` board port), **Linux 6.12 LTS** with an M6G2C device
 tree, and a **Debian 13 "trixie" armhf** root filesystem.
 
-> Earlier versions of this kit built Debian 10 buster with Linux 6.1. That
-> combination is what was tested on the EPC-M6G2C; the trixie/6.12 port keeps
-> the same board files but has not yet been booted on hardware (section 8).
+> **Status:** this image runs in production on the EPC-M6G2C it was
+> developed on, together with NEP's gateway software and the modernised web
+> interface (section 9). The hardware and the software have been tested on
+> that unit and work; see section 8 for exactly what was checked. Nothing
+> needs re-checking there. The checks in section 4 are for a different
+> unit or carrier board.
 
 ```
 SD card
@@ -121,12 +124,14 @@ goes past.
 
 ---
 
-## 4. Before relying on it: confirm the board-specific details
+## 4. Board-specific details (confirmed on the EPC-M6G2C)
 
-ZLG does not publish the M6G2C schematic or device tree. A factory boot log
-of an **EPC-M6G2C** (ZLG U-Boot 2015.04 + Linux 4.1.15) confirmed part of the
-hardware; the rest is still standard i.MX6UL wiring, marked `VERIFY` in the
-sources:
+ZLG does not publish the M6G2C schematic or device tree. The details below
+were worked out from ZLG's factory boot log, its device tree (read from the
+NAND) and the factory software, and confirmed on the EPC-M6G2C this kit was
+developed on, which runs this image. On that unit they are settled; the
+steps after the table are only for porting the kit to another unit or
+carrier board:
 
 | Item | Status | Where |
 |---|---|---|
@@ -147,9 +152,9 @@ sources:
 | Touch | **confirmed** 4-wire resistive on the i.MX6UL touch controller (GPIO1_IO01-04) | kernel DTS |
 | Beeper | **confirmed** PWM6 on LCD_DATA19, 2.5 kHz as ZLG; `pwm-beeper` input device, console bell, `m6g2c-beep` | kernel DTS |
 | CAN, MQS audio, ADV7180 video input | off | kernel DTS |
-| DDR calibration | NXP EVK values (DRAM already works) | `m6g2c.c` |
+| DDR calibration | NXP EVK values; DRAM works with them on the EPC-M6G2C | `m6g2c.c` |
 
-The fastest way to settle all of them is to read them off the factory
+**Only for a different unit or carrier:** read the details off the factory
 software **before** you overwrite anything:
 
 1. Boot ZLG's original Linux, copy `tools/collect-zlg-hwinfo.sh` to the board
@@ -183,7 +188,9 @@ input is toggled. ZLG's EPC-M6G2C device tree puts WDI on **GPIO5_IO00**, and
 the kit now feeds it by default (`WDT_GPIO=5:0`, `WDT_MARGIN_MS=700`, as in
 ZLG's own configuration).
 
-To confirm the pin on your unit, run this on the factory Linux:
+This is confirmed on the EPC-M6G2C this kit was developed on: the image
+boots and runs there with the watchdog fed. To check the pin on a different
+unit, run this on its factory Linux:
 `cat /sys/kernel/debug/gpio` (mount debugfs first if needed). In that
 kernel's numbering GPIO5_IO00 is `gpio-128`, and it should be listed as in
 use by the watchdog driver. On another carrier, or if the watchdog is
@@ -458,7 +465,7 @@ original programs unchanged, from a copy of the factory root filesystem in
 | `zlg-pctrl` | `gateway-pctrl` | `/usr/local/bin/gateway` |
 | `zlg-mqtt` | `gateway-mqtt-nep` (NEP's cloud) | `/usr/local/bin/gateway`, `plc.sh` |
 | `zlg-hmi` | `gateway-hmi -qws` (touch screen, takes over `tty1`) | `/usr/local/bin/gateway`, `plc.sh` |
-| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 | `rcS` |
+| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 9b; off on the production unit) | `rcS` |
 | `zlg-cron` | ZLG's crontab (uploads, reports, the 01:00 daily clean) | `ginit.sh` |
 
 Each is restarted 10 s after it stops, which replaces `plc.sh`'s checks.
@@ -538,10 +545,11 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
 * NEP's own copies of the replaced libraries (jQuery 1.6-1.9, jQuery UI 1.8
   and 1.9, Highcharts 2, simpletooltip, Modernizr, poshytip) are still in
   `nep/static/js/` but lighttpd refuses them (403), so no page can load them.
-* `misetup/` (the inverter grid-profile tool) is not served. ZLG's server serves it until you switch.
+* `misetup/` (the inverter grid-profile tool) is not served. ZLG's server, which serves it, is switched off.
 
-Fetch the open-source parts on the PC (the rootfs stage does it too), then
-copy the kit to the board:
+This is installed and running on port 80 on the production unit. The steps
+below are for a fresh install or an update. Fetch the open-source parts on
+the PC (the rootfs stage does it too), then copy the kit to the board:
 
 ```sh
 board-files/zlg/web/fetch-deps.sh
@@ -561,9 +569,11 @@ sudo systemctl restart zlg.target
 sudo sh zlg/web/install-web.sh          # new server on port 8080
 ```
 
-Compare `http://<board>:8080/` with ZLG's `http://<board>/`. When everything
-matches, `sudo sh /usr/local/share/zlg/web/install-web.sh --switch` moves the
-new server to port 80 and stops ZLG's; `--revert` goes back. After
+On a fresh install the new server starts on port 8080, next to ZLG's on
+port 80, so the two can be compared; `sudo sh
+/usr/local/share/zlg/web/install-web.sh --switch` then moves it to port 80
+and stops ZLG's, and `--revert` goes back. Once switched (as on the
+production unit), re-running `install-web.sh` keeps port 80. After
 `zlg-import`, re-run `install-web.sh --rebuild`.
 
 ZLG's command-line PHP (the cron jobs' `php proxy`, which writes the status
@@ -606,19 +616,36 @@ tools/                      factory hardware dump, pinctrl decoder, DCD/DDR deco
                             watchdog-GPIO finder
 ```
 
-## 8. What has and has not been tested
+## 8. What has been tested
 
-Checked while writing this kit: the U-Boot Kconfig patch applies (and
-re-applies) cleanly to v2024.01 and every defconfig value takes effect; the
-board C file type-checks against the U-Boot headers for both SPL and U-Boot
-proper; both device trees compile against U-Boot 2024.01 / Linux 6.12
-includes with all feature combinations; every kernel config fragment value
-takes effect on top of `imx_v6_v7_defconfig`; and both decoding tools
-round-trip test data.
+**On the EPC-M6G2C this kit was developed on (the production unit), running
+the trixie image:**
 
-On an EPC-M6G2C, the buster/6.1 version of this kit booted and everything in
-the section 4 table worked (watchdog, Ethernet, Wi-Fi, NAND, display, touch,
-beeper, SPI, ADC). For trixie/6.12, the kernel configuration and the display
-patch were checked against v6.12.115 and the device tree compiles against
-it, but the trixie image has not been booted on the board yet. If it resets
-early, compare the boot timing with the 6.1 log (section 4a).
+* Boot: U-Boot 2024.01 (this kit's board port) and Linux 6.12.115 from the
+  SD card, with the external hardware watchdog fed from power-on (section
+  4a); systemd takes over at about 3.5 s.
+* Hardware: Ethernet, Wi-Fi (TL-WN823N, `rtl8xxxu`), NAND (read-only
+  partitions), display, touch, beeper, RTC (holds UTC) and `spidev`.
+* NEP's gateway software from `/srv/zlg` (section 9): inverter data over the
+  serial PLC module on `/dev/ttymxc1`, the touch-screen HMI, the cron jobs
+  and reports, with local-only mode on.
+* The web interface on Debian's lighttpd and PHP 8.4 (section 9b): every
+  page compared with ZLG's own server and confirmed in the browser, then
+  switched to port 80: status page with live inverter boxes, Energy Output
+  charts (Highcharts 13), Alert, Layout including Manage layout and moving
+  boxes, the Weather page with its map, and the settings pages. ZLG's PHP 5
+  server is off.
+* ZLG's command-line PHP on PHP 8.4: `php proxy` writes the same 127 files
+  as under PHP 5 (apart from timestamps); the hourly reports are generated.
+* The weather from Open-Meteo for the configured location.
+
+**Not tested, because this unit doesn't use them:** the MI200E power-line
+modems (this unit uses the serial PLC module; its MI200E modems fail their
+self check under ZLG's own driver too, section 5c), ENET1, CAN, UART7/8 and
+the ADC on trixie, and WPA3-only (SAE) Wi-Fi (section 5a).
+
+**Build-time checks:** the U-Boot Kconfig patch applies (and re-applies)
+cleanly to v2024.01 and every defconfig value takes effect; the board C file
+type-checks for both SPL and U-Boot proper; both device trees compile with
+all feature combinations; every kernel config fragment value takes effect on
+top of `imx_v6_v7_defconfig`; and the decoding tools round-trip test data.
