@@ -1,12 +1,37 @@
 # Notes for Claude: ZLG EPC-M6G2C Debian kit
 
-**Branch nep-fw-20230903** (NEP firmware 20230903, the "New" unit): work in
-progress, branched from nep-fw-20210303 on 2026-11-06 with only
-nep-firmware changed. Nothing here has run on the New unit yet; everything
-below describes the Old unit (firmware 20210303). Next: get the New unit's
-gateway.cfg, engineer.cfg, crontab, start-up scripts, web bundle and
-/root/Gateway + /opt listings; find how NEP disabled the local web
-interface and whether the gateway works without its cloud (gateway-mqtt-nep).
+**Branch nep-fw-20230903** (NEP firmware 20230903, minor 23, the "New"
+unit). Branched from nep-fw-20210303 on 2026-11-06; shared fixes are made on
+nep-fw-20210303 and merged here. Everything below the next paragraph
+describes the Old unit (firmware 20210303) unless it says otherwise.
+
+New unit (2026-11-06): same EPC-M6G2C hardware and serial PLC module
+(comm_device=0, plc_module=1, single phase). Factory system: root@
+192.168.1.241 (NAND). SD system: debian@192.168.1.239, hostname NEP-yyyyy
+(serial not recorded here), web interface on port 80 (--switch done), local-only
+on, local weather. Findings:
+- NEP's web app is byte-identical to 20210303's. The boot script
+  /usr/local/bin/gateway renames index.php, index.html and nep/index.php to
+  .bak unless /root/Gateway/web_profile has INTERNAL_WEB other than "off";
+  ZLG's lighttpd then answers 403. zlg-web-port uses CI3's own index.php,
+  so it works unchanged.
+- New cloud links: gateway-mqtt-nep (mqtts://broker.nepviewer.com:8883;
+  zlg-mqtt.service is skipped when ZLG_LOCAL_ONLY=1, via zlg-chroot
+  local-only-off) and cron critical_alert.php (POSTs to nepviewer.com;
+  dropped in local-only). New local cron jobs: handleMin.php, jitter.sh
+  delays; plc.sh in cron (dropped, as on Old).
+- The boot script also sets plc_module from the serial number's second
+  digit, unpacks /usr/lib/lib.tar.gz (MQTT libraries) and links the
+  US/EU MQTT client; zlg-chroot strips its program starts, mqtt included.
+- Both units' plc_id.conf list the same 24 inverters (0x33xxxxxx ...). The
+  New unit is out of power-line range of them and the Old unit runs them,
+  so its readings are zeros with status 8000. The user accepts the inverter
+  link as working (same module and set-up as Old); don't stop the Old
+  unit's zlg-plc to test it.
+- Found here and fixed in shared code: on a fresh install zlg-chroot
+  starts before install-web.sh installs PHP 8.4, so the cron scripts kept
+  PHP 5 and NEP's Yahoo wea; install-web.sh now restarts zlg.target when
+  the PHP 8.4 wrapper isn't mounted.
 
 Build kit for a Debian 13 (trixie, armhf) SD-card image for the ZLG M6G2C-256LI
 module (i.MX6UL, 256 MB DDR3L, Spansion S34ML02G2 NAND) in a ZLG EPC-M6G2C box.

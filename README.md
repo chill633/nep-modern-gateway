@@ -35,21 +35,26 @@ Everything is built from source: mainline **U-Boot 2024.01** (SPL + U-Boot,
 with a new `zlg_m6g2c` board port), **Linux 6.12 LTS** with an M6G2C device
 tree, and a **Debian 13 "trixie" armhf** root filesystem.
 
-> **NEP firmware 20230903: work in progress.** This branch,
-> `nep-fw-20230903`, is for gateways running NEP firmware major version
-> **20230903** (`major=` in the `[version]` section of
-> `/root/Gateway/gateway.cfg`), where NEP disabled the local web interface.
-> It starts as a copy of `nep-fw-20210303`, the branch for firmware
-> 20210303, and has **not been tried on a 20230903 gateway yet**: the rest
-> of this README still describes the 20210303 unit. `zlg-import` and
+> **NEP firmware 20230903.** This branch, `nep-fw-20230903`, is for
+> gateways running NEP firmware major version **20230903** (`major=` in the
+> `[version]` section of `/root/Gateway/gateway.cfg`). Gateways with
+> firmware 20210303 use the branch `nep-fw-20210303`. `zlg-import` and
 > `install-web.sh` check the version and stop on a mismatch (section 7).
+>
+> Firmware 20230903 runs on the same hardware and has the same web pages as
+> 20210303. NEP only hides the pages: its boot script renames `index.php`,
+> `index.html` and `nep/index.php` to `.bak`, so its own lighttpd answers
+> 403. This kit serves the pages with its own front controller, so they
+> work again. The firmware also adds two links to NEP's cloud,
+> `gateway-mqtt-nep` (MQTT to `broker.nepviewer.com`) and the cron job
+> `critical_alert.php`; local-only mode cuts both (section 7).
 
-> **Status:** this image runs in production on the EPC-M6G2C it was
-> developed on, together with NEP's gateway software and the modernised web
-> interface (section 7). The hardware and the software have been tested on
-> that unit and work; see section 9 for exactly what was checked. Nothing
-> needs re-checking there. The checks in section 4 are for a different
-> unit or carrier board.
+> **Status:** this image runs on a gateway with firmware 20230903 (the
+> "New" unit), together with NEP's gateway software and the modernised web
+> interface on port 80 (section 7). The rest of this README describes the
+> hardware and the setup, which are the same as for firmware 20210303; see
+> section 9 for what was checked on the 20230903 gateway. The checks in
+> section 4 are for a different unit or carrier board.
 
 ```
 SD card
@@ -670,6 +675,31 @@ tools/                      factory hardware dump, pinctrl decoder, DCD/DDR deco
 ```
 
 ## 9. What has been tested
+
+**On the gateway with NEP firmware 20230903 (the "New" unit), running the
+trixie image:**
+
+* Boot from the SD card, Wi-Fi, SSH and the NAND (read-only); `zlg-import`
+  with its firmware check ("NEP firmware 20230903: matches this kit").
+* NEP's gateway software from `/srv/zlg`: `gateway-plc` (with the serial
+  port to the inverters open), `gateway-pctrl`, the touch-screen HMI and
+  the cron jobs, with PHP 8.4 for the command-line scripts. The hostname
+  became `NEP-` and the last five digits of its serial number.
+* Local-only mode: `gateway-mqtt-nep` isn't started, the crontab keeps only
+  its local jobs, and the board has no connections to the outside.
+* The web interface on port 80, checked in the browser: status page,
+  Energy Output charts (Highcharts 13), Alert, Layout and the Weather page
+  with its weather and map; the history carried over from the factory
+  system. ZLG's server is off.
+* **Not tested:** live inverter readings. That gateway is too far from the
+  inverters to reach them over the power line, and the inverters it is set
+  up for are run by the 20210303 gateway in production. The inverter link
+  is the same serial PLC module and the same `gateway-plc` set-up as on the
+  20210303 gateway, where it works.
+
+The rest of this section is the 20210303 gateway's test record, which
+covers the shared parts (U-Boot, kernel, hardware).
+
 
 **On the EPC-M6G2C this kit was developed on (the production unit), running
 the trixie image:**
