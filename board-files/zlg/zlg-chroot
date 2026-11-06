@@ -74,6 +74,9 @@ start() {
 	mnt /tmp -t tmpfs -o mode=1777,size=32m tmpfs
 	mnt /var -t tmpfs -o mode=755,size=16m tmpfs
 	mnt /run -t tmpfs -o mode=755,size=8m tmpfs
+	# Debian's time zone files, read-only: Debian's PHP 8.4 (zlg-web-fpm)
+	# reads them and crashes without them; ZLG's system has none
+	mnt /usr/share/zoneinfo --bind -o ro /usr/share/zoneinfo
 
 	# DNS: systemd-resolved's stub works inside (same network namespace)
 	rm -f "$ROOT/etc/resolv.conf"
@@ -186,7 +189,7 @@ start() {
 }
 
 stop() {
-	for t in /m6g2c/run /run /var /tmp /dev/shm /dev/pts /dev /sys /proc; do
+	for t in /m6g2c/run /usr/share/zoneinfo /run /var /tmp /dev/shm /dev/pts /dev /sys /proc; do
 		[ -L "$ROOT$t" ] && continue
 		mountpoint -q "$ROOT$t" && umount -l "$ROOT$t"
 	done

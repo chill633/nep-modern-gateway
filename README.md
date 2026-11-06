@@ -515,6 +515,55 @@ systemctl list-units 'zlg*'
 * Only one system talks to the inverters at a time anyway: the board runs
   either the SD card or the NAND.
 
+### 9b. The web interface on Debian's lighttpd and PHP 8.4
+
+ZLG's web server (lighttpd + PHP 5.4.12 from 2013, `zlg-httpd`) is no longer maintained. `board-files/zlg/web/` replaces it with Debian's lighttpd and
+PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
+
+* `zlg-web-port` converts NEP's app on the board, from the copy in
+  `/srv/zlg` into `/srv/zlg/www` (NEP's code is never part of this kit):
+  CodeIgniter 2.1.3 -> 3.1.13, Debian's jQuery 3 and jQuery UI 1.13 with
+  jQuery Migrate, PHP 8 fixes (null-safe `count()` and friends, zeros instead
+  of a failed page while `gateway-plc` restarts). It leaves out
+  `controllers/proxy.php` (encrypted with `php_screw`, PHP 5 only), a dead `status2.php`, and makes
+  `home/info`, `home/show` and `maildebug` unreachable.
+* `zlg-web-fpm` runs PHP 8.4 chrooted into `/srv/zlg` as `www-data`, with the
+  shifted clock (`zlg-time.so`, which now also covers Debian 13's 64-bit
+  time calls). `zlg-web` is lighttpd in front of it.
+* Errors from NEP's code under PHP 8 go to `journalctl -u zlg-web-fpm`.
+* `misetup/` (the inverter grid-profile tool) is not served. ZLG's server serves it until you switch.
+
+Fetch the open-source parts on the PC (the rootfs stage does it too), then
+copy the kit to the board:
+
+```sh
+board-files/zlg/web/fetch-deps.sh
+arm-linux-gnueabihf-gcc -O2 -marm -fPIC -shared -nostdlib -nostartfiles \
+    -fno-stack-protector -fno-builtin -Wl,--hash-style=both \
+    -o board-files/zlg/zlg-time.so board-files/zlg/zlg-time.c
+tar czf zlg-migrate.tar.gz -C board-files zlg
+scp zlg-migrate.tar.gz debian@m6g2c:/tmp/
+```
+
+On the board:
+
+```sh
+cd /tmp && rm -rf zlg && tar xzf zlg-migrate.tar.gz
+sudo sh zlg/install.sh                  # updated zlg-time.so
+sudo systemctl restart zlg.target
+sudo sh zlg/web/install-web.sh          # new server on port 8080
+```
+
+Compare `http://<board>:8080/` with ZLG's `http://<board>/`. When everything
+matches, `sudo sh /usr/local/share/zlg/web/install-web.sh --switch` moves the
+new server to port 80 and stops ZLG's; `--revert` goes back. After
+`zlg-import`, re-run `install-web.sh --rebuild`.
+
+Still on PHP 5 after the switch: the cron jobs' command-line scripts inside
+`/srv/zlg` (`php proxy`, which writes the status boxes, `php wea`, the
+reports). They aren't reachable from the network; moving them is the next
+step.
+
 ## 7. Layout
 
 ```
@@ -528,6 +577,7 @@ board-files/u-boot/         board/zlg/m6g2c, defconfig, config header, U-Boot DT
 board-files/linux/          kernel DTS, config fragment, drivers/ (MI200E PLC driver)
 board-files/rootfs/         first-boot resize/SSH-key service
 board-files/zlg/            runs ZLG's gateway software in /srv/zlg (section 9)
+board-files/zlg/web/        NEP's web interface on lighttpd + PHP 8.4 (section 9b)
 tools/                      factory hardware dump, pinctrl decoder, DCD/DDR decoder,
                             watchdog-GPIO finder
 ```

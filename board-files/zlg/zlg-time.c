@@ -10,8 +10,14 @@
  * reads local time again, while the board's own clock stays correct.
  *
  * The offset (seconds east of UTC, e.g. -18000 for EST) is read from
- * /m6g2c/run/utcoffset, which zlg-chroot keeps up to date across daylight
- * saving changes; it is re-read at most once a minute.
+ * /m6g2c/run/utcoffset (inside /srv/zlg) or /run/zlg/utcoffset (outside,
+ * e.g. the php-fpm master before its workers chroot), which zlg-chroot keeps
+ * up to date across daylight saving changes; it is re-read at most once a
+ * minute.
+ *
+ * Both time ABIs are covered: the 32-bit time_t calls of ZLG's 2014 programs
+ * and the 64-bit ones (__clock_gettime64 etc., glibc 2.34+) of Debian 13's
+ * armhf programs such as php-fpm8.4.
  *
  * Built without the C library (raw system calls), so it loads into ZLG's
  * 2014 glibc whatever compiler builds it:
@@ -24,12 +30,15 @@
 #define NR_close		6
 #define NR_gettimeofday		78
 #define NR_clock_gettime	263
+#define NR_clock_gettime64	403
 
 #define CLOCK_REALTIME		0
 #define CLOCK_REALTIME_COARSE	5
 
 struct ts32 { long tv_sec; long tv_nsec; };
 struct tv32 { long tv_sec; long tv_usec; };
+struct ts64 { long long tv_sec; long tv_nsec; long pad; };
+struct tv64 { long long tv_sec; long long tv_usec; };
 
 #if defined(__arm__)
 static long sc3(long n, long a, long b, long c)
@@ -53,6 +62,14 @@ static long sc3(long n, long a, long b, long c)
 	case NR_close:		return syscall(3, a);
 	case NR_gettimeofday:	return syscall(96, a, b);
 	case NR_clock_gettime:	return syscall(228, a, b);
+	case NR_clock_gettime64: {
+		/* x86-64 timespec is already 64-bit: copy into the 32-bit ABI layout */
+		struct { long long s; long long ns; } t;
+		long r = syscall(228, a, &t);
+		struct ts64 *o = (struct ts64 *)b;
+		if (r == 0) { o->tv_sec = t.s; o->tv_nsec = (long)t.ns; }
+		return r;
+	}
 	}
 	return -38;
 }
@@ -79,6 +96,8 @@ static void refresh(long now)
 		return;
 	next_check = now + 60;
 	fd = sc3(NR_open, (long)"/m6g2c/run/utcoffset", 0 /* O_RDONLY */, 0);
+	if (fd < 0)
+		fd = sc3(NR_open, (long)"/run/zlg/utcoffset", 0, 0);
 	if (fd < 0)
 		return;
 	n = sc3(NR_read, fd, (long)buf, sizeof(buf) - 1);
@@ -136,4 +155,47 @@ long time(long *t)
 	if (t)
 		*t = now;
 	return now;
+}
+
+/* ---- 64-bit time_t (glibc 2.34+, Debian 13 armhf) ---- */
+
+__attribute__((visibility("default")))
+int __clock_gettime64(int clk, struct ts64 *ts)
+{
+	long r = sc3(NR_clock_gettime64, clk, (long)ts, 0);
+
+	if (r < 0)
+		return -1;
+	if (clk == CLOCK_REALTIME || clk == CLOCK_REALTIME_COARSE) {
+		refresh((long)ts->tv_sec);
+		ts->tv_sec += offset;
+	}
+	return 0;
+}
+
+__attribute__((visibility("default")))
+int __gettimeofday64(struct tv64 *tv, void *tz)
+{
+	struct ts64 ts;
+
+	(void)tz;
+	if (!tv)
+		return 0;
+	if (__clock_gettime64(CLOCK_REALTIME, &ts) < 0)
+		return -1;
+	tv->tv_sec = ts.tv_sec;
+	tv->tv_usec = ts.tv_nsec / 1000;
+	return 0;
+}
+
+__attribute__((visibility("default")))
+long long __time64(long long *t)
+{
+	struct ts64 ts;
+
+	if (__clock_gettime64(CLOCK_REALTIME, &ts) < 0)
+		return -1;
+	if (t)
+		*t = ts.tv_sec;
+	return ts.tv_sec;
 }

@@ -51,29 +51,47 @@ on (`ZLG_LOCAL_ONLY=1`, no cloud uploads).
   gateway-mqtt-nep; local web enabled; `gateway-pctrl` runs once with
   check_interval=0). Services skip programs a version lacks (ExecCondition).
 
-## Next: move the web interface to Debian's lighttpd + PHP 8.4
+## Web interface on Debian's lighttpd + PHP 8.4 (2026-11-06)
 
-The user wants this because ZLG's lighttpd + PHP 5.4.12 (with php_screw, apc,
-zmq) is no longer maintained.
+board-files/zlg/web/ (README 9b): zlg-web-port (PHP, runs on the board)
+converts /srv/zlg/root/Gateway/nep -> /srv/zlg/www (CI 2.1.3 -> 3.1.13 with
+CI3's config files + NEP's settings, Ucfirst controllers, tokenizer-based
+count()/implode()/sort()/shmop_read() -> zlg_ compat functions,
+#[AllowDynamicProperties], jQuery 3 + Migrate, blockUI 2.70). zlg-web-fpm
+(chroot /srv/zlg, www-data, zlg-time.so preloaded) + zlg-web (lighttpd,
+port ZLG_WEB_PORT, 8080 until install-web.sh --switch). Deps pinned in
+fetch-deps.sh (deps/ is git-ignored).
 
-- App: `/root/Gateway/nep`, CodeIgniter 2.1.3 (doesn't run on PHP 8).
-  Plan: CodeIgniter 3.1.13; port the ~dozen controllers/views.
-  Rewrites from ZLG's lighttpd.conf: `^/nep/static/(.*)$` => `$0`,
-  `/nep/(.*)$` => `/nep/index.php/$1`; url.access-deny `~`, `.inc`.
-- Uses shmop (in Debian's PHP), possibly SQLite/PDO (check), no apc/ereg/zmq
-  found in the web code. Cron PHP (proxy, wea, report pages via gene.sh)
-  moves to PHP 8.4 as well, retiring /opt/php5 and /opt/httpd.
-- Serving: Debian lighttpd as www-data + a dedicated PHP-FPM pool with
-  `chroot = /srv/zlg` (absolute /root/Gateway paths keep working) and
-  zlg-time.so preloaded (the charts depend on the shifted clock). Don't serve misetup.
-- JavaScript: jQuery 1.6.2/1.8.2/1.9.1, jQuery UI 1.8.17/1.9.0, Highcharts
-  2.2.3/2.3.3, blockUI 2.39, masonry 2.1, poshytip 1.1, infinitescroll,
-  corner. Plan: Debian's libjs-jquery / libjs-jquery-ui (+ jQuery Migrate while
-  porting), current Highcharts (personal use), replace or drop old plugins,
-  delete gateway-web (old UI) and macOS `._*` files.
-- Needed from the user: the full app bundle (README / conversation):
-  `cd /srv/zlg && sudo tar czf /tmp/zlg-nep.tar.gz --exclude='root/Gateway/nep/static/local' root/Gateway/nep root/Gateway/index.php root/Gateway/index.html root/Gateway/misetup opt/httpd/conf opt/php5/lib/php.ini`
-  ZLG/NEP files are the vendor's: don't commit them to this repository.
+Findings: controllers/proxy.php is php_screw-encrypted (dropped);
+status2.php declares class Status (dead); misetup is not served. zlg-time.so needed __clock_gettime64 /
+__time64 / __gettimeofday64 for Debian 13 armhf programs.
+
+Testing without the board: Debian's armhf PHP 8.4 / lighttpd .debs unpacked
+over work/rootfs-trixie and run with qemu-arm-static -L (TCP instead of unix
+sockets, host paths in lighttpd.conf, no chroot as non-root). Every page
+renders; remaining warnings were missing test data.
+
+Status (2026-11-06): deployed and switched to port 80 (install-web.sh
+--switch); ZLG's zlg-httpd is off. Checked page by page against ZLG's
+server; the user confirmed everything in the browser.
+
+Problems found on the board, now fixed in the kit:
+- php-fpm and lighttpd can't reopen /proc/self/fd/2 or /dev/stderr when
+  stderr is the journal's socket: php-fpm logs to syslog, lighttpd has no
+  server.errorlog.
+- ZLG's rootfs has no /usr/share/zoneinfo; Debian's PHP then throws
+  "Timezone database is corrupt" or segfaults. zlg-chroot bind-mounts the
+  host's zoneinfo read-only.
+- jQuery 3: .attr("checked")/.attr("value") return attributes (the status
+  page's auto-refresh never ran, forms read stale values) and .live() is
+  gone; zlg-web-port converts them to .prop()/.val()/$(document).on().
+
+Panels 9 and 10 (one inverter) read 0 with status 8000: that
+inverter is physically unplugged, not a fault.
+
+Open: the PHP 5 CLI cron scripts (proxy, wea, report pages via gene.sh),
+then Highcharts 2.x and the old jQuery plugins (masonry, simpletooltip,
+poshytip).
 
 ## Working with the user
 

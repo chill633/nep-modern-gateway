@@ -3,3 +3,6 @@ work/
 out/
 __pycache__/
 *.pyc
+zlg-*.tar.gz
+board-files/zlg/web/deps/
+board-files/zlg/zlg-time.so

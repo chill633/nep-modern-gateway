@@ -1,0 +1,356 @@
+#!/usr/bin/php8.4
+<?php
+/*
+ * zlg-web-port: build the PHP 8 / CodeIgniter 3 version of NEP's web
+ * interface from the copy of ZLG's system in /srv/zlg.
+ *
+ *   zlg-web-port [--src DIR] [--deps DIR] [--web DIR] [--out DIR] [--check]
+ *
+ *   --src   NEP's app:            /srv/zlg/root/Gateway/nep
+ *   --deps  fetched by fetch-deps.sh: /usr/local/share/zlg/web/deps
+ *   --web   this kit's web files: /usr/local/share/zlg/web
+ *   --out   new document root:   /srv/zlg/www   (built next to it, then swapped)
+ *   --check only report what would change
+ *
+ * NEP's code is not part of this kit: it is converted on the board from the
+ * copy in /srv/zlg, and the original stays untouched. Re-run after
+ * zlg-import or when this script changes; the result is the same each time.
+ *
+ * What changes, and why:
+ *  - CodeIgniter 2.1.3 (doesn't run on PHP 8) -> 3.1.13 with CI3's own
+ *    config files, carrying over NEP's settings (routes, autoload, language)
+ *  - controllers and models renamed to Ucfirst.php (CI3 needs it)
+ *  - NEP's own Session library dropped: CI3's session (files driver) has the
+ *    same userdata()/set_userdata() calls
+ *  - count(), sort(), implode(), in_array(), array_sum(), shmop_read() in
+ *    NEP's code -> zlg_ versions with PHP 5 behaviour for null/false
+ *    arguments
+ *  - jQuery 1.8.2 / jQuery UI 1.9.0 / blockUI 2.39 -> Debian's jQuery 3 and
+ *    jQuery UI 1.13 (patched by apt), jQuery Migrate, blockUI 2.70
+ *  - "Last updated": no China offset (see zlg-chroot)
+ *  - home/info, home/show (a database demo) and maildebug are
+ *    not reachable
+ *  - files encrypted with php_screw (controllers/proxy.php) can't run on PHP 8 and are left out
+ */
+
+$opt = getopt('', ['src:', 'deps:', 'web:', 'out:', 'check']);
+$src  = rtrim($opt['src']  ?? '/srv/zlg/root/Gateway/nep', '/');
+$web  = rtrim($opt['web']  ?? '/usr/local/share/zlg/web', '/');
+$deps = rtrim($opt['deps'] ?? "$web/deps", '/');
+$out  = rtrim($opt['out']  ?? '/srv/zlg/www', '/');
+$check = isset($opt['check']);
+
+function fail($m) { fwrite(STDERR, "zlg-web-port: $m\n"); exit(1); }
+function note($m) { echo $m, "\n"; }
+
+foreach (["$src/application/controllers", "$deps/ci3/system/core/CodeIgniter.php",
+	  "$deps/ci3/index.php", "$web/zlg_compat_helper.php"] as $need)
+	file_exists($need) || fail("missing $need");
+
+$app = "$src/application";
+$stats = [];
+function stat_add($k, $n = 1) { global $stats; $stats[$k] = ($stats[$k] ?? 0) + $n; }
+
+/* ---- PHP code: calls -> zlg_ versions, via PHP's tokenizer ------------- */
+
+const COMPAT = ['count', 'sizeof', 'sort', 'rsort', 'implode', 'join',
+		'in_array', 'array_sum', 'shmop_read', 'shmop_close'];
+
+function compat_calls(string $code): string
+{
+	$t = token_get_all($code);
+	$n = count($t);
+	$sig = function ($i, $dir) use ($t, $n) {	/* next significant token */
+		for ($i += $dir; $i >= 0 && $i < $n; $i += $dir)
+			if (!is_array($t[$i]) || !in_array($t[$i][0],
+			    [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]))
+				return $t[$i];
+		return null;
+	};
+	$out = '';
+	for ($i = 0; $i < $n; $i++) {
+		$tok = $t[$i];
+		if (is_array($tok) && $tok[0] === T_STRING &&
+		    in_array(strtolower($tok[1]), COMPAT, true)) {
+			$next = $sig($i, 1);
+			$prev = $sig($i, -1);
+			$pt = is_array($prev) ? $prev[0] : $prev;
+			if ($next === '(' && !in_array($pt, [T_OBJECT_OPERATOR,
+			    T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION,
+			    T_NEW, T_NS_SEPARATOR], true)) {
+				$f = strtolower($tok[1]);
+				$f = ['sizeof' => 'count', 'join' => 'implode'][$f] ?? $f;
+				$out .= "zlg_$f";
+				stat_add("calls: $f()");
+				continue;
+			}
+		}
+		$out .= is_array($tok) ? $tok[1] : $tok;
+	}
+	return $out;
+}
+
+/* ---- views: libraries and the time display ----------------------------- */
+
+function view_edits(string $v): string
+{
+	$js = function ($file) {
+		return '<script type="text/javascript" src="' . $file . '"></script>';
+	};
+	$rules = [
+		/* jQuery 1.x -> Debian's jQuery 3 + Migrate (NEP's code uses
+		   APIs jQuery 3 removed, such as .live() and .size()) */
+		'~<script[^>]*src="[^"]*static/js/jquery(-1\.[0-9.]+)?(\.min)?\.js"[^>]*>\s*</script>~'
+			=> $js('/javascript/jquery/jquery.min.js') . "\n" .
+			   $js('/zlg-web/js/jquery-migrate.min.js'),
+		'~<script[^>]*src="[^"]*static/js/jquery-ui-[0-9.]+\.custom(\.min)?\.js"[^>]*>\s*</script>~'
+			=> $js('/javascript/jquery-ui/jquery-ui.min.js'),
+		'~<script[^>]*src="[^"]*static/js/jquery\.blockUI(\.min)?\.js"[^>]*>\s*</script>~'
+			=> $js('/zlg-web/js/jquery.blockUI.js'),
+		/* jQuery 1.9 changed .attr() for form state: .attr("checked")
+		   and .attr("value") now return the HTML attribute, not the
+		   current state, so the status page's auto-refresh never ran and
+		   the settings forms read stale values */
+		'~\.attr\(\s*(["\'])(checked|selected|disabled)\1\s*\)~'
+			=> '.prop($1$2$1)',
+		'~\.attr\(\s*(["\'])(checked|selected|disabled)\1\s*,\s*(["\'])true\3\s*\)~'
+			=> '.prop($1$2$1, true)',
+		'~\.attr\(\s*(["\'])(checked|selected|disabled)\1\s*,\s*(["\'])false\3\s*\)~'
+			=> '.prop($1$2$1, false)',
+		'~\.attr\(\s*(["\'])value\1\s*\)~' => '.val()',
+		'~\.attr\(\s*(["\'])value\1\s*,\s*~' => '.val(',
+		/* .live() was removed in jQuery 1.9 (and "hover" as an event) */
+		'~\$\(\s*("[^"]*"|\'[^\']*\')\s*\)\.live\(\s*(["\'])hover\2\s*,~'
+			=> '$(document).on("mouseenter mouseleave", $1,',
+		'~\$\(\s*("[^"]*"|\'[^\']*\')\s*\)\.live\(\s*("[^"]*"|\'[^\']*\')\s*,~'
+			=> '$(document).on($2, $1,',
+		/* "Last updated" showed server time minus China's offset */
+		'~new Date\(result\.(t|time)\*1000-28800000\)~' => 'new Date(result.$1*1000)',
+		'~updatet\.toLocaleString\(\)~' => 'updatet.toLocaleString(undefined,{timeZone:"UTC"})',
+	];
+	foreach ($rules as $re => $to) {
+		$v = preg_replace($re, $to, $v, -1, $c);
+		if ($c)
+			stat_add('views: ' . substr($re, 1, 50), $c);
+	}
+	return $v;
+}
+
+/* ---- CodeIgniter 3.1.13 on PHP 8.4 ----------------------------------- */
+
+/* PHP 8.2+ deprecates dynamic properties, which CodeIgniter 3 (and NEP's
+   classes) use everywhere; PHP 8.4 deprecates E_STRICT. */
+function php84_fixes(string $code): string
+{
+	$code = preg_replace('~^((?:abstract\s+|final\s+)?class\s+\w+)~m',
+		"#[\\AllowDynamicProperties]\n\$1", $code, -1, $c);
+	if ($c)
+		stat_add('classes: #[AllowDynamicProperties]', $c);
+	$code = str_replace(["E_STRICT\t\t=>\t'Runtime Notice'", ' & ~E_STRICT'],
+			    ["2048\t\t=>\t'Runtime Notice'", ''], $code, $c);
+	if ($c)
+		stat_add('E_STRICT removed', $c);
+	return $code;
+}
+
+/* ---- build ----------------------------------------------------------- */
+
+function copy_tree($from, $to)
+{
+	@mkdir($to, 0755, true);
+	foreach (scandir($from) as $f) {
+		if ($f === '.' || $f === '..' || str_starts_with($f, '._') ||
+		    str_ends_with($f, '~'))
+			continue;
+		is_dir("$from/$f") ? copy_tree("$from/$f", "$to/$f")
+				   : copy("$from/$f", "$to/$f");
+	}
+}
+
+function rm_tree($d)
+{
+	if (!file_exists($d) && !is_link($d))
+		return;
+	if (is_dir($d) && !is_link($d)) {
+		foreach (scandir($d) as $f)
+			if ($f !== '.' && $f !== '..')
+				rm_tree("$d/$f");
+		rmdir($d);
+	} else {
+		unlink($d);
+	}
+}
+
+function put($file, $data)
+{
+	@mkdir(dirname($file), 0755, true);
+	file_put_contents($file, $data) !== false || fail("cannot write $file");
+}
+
+function php_files($dir)
+{
+	$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir,
+		FilesystemIterator::SKIP_DOTS));
+	foreach ($it as $f)
+		if ($f->isFile() && str_ends_with($f->getFilename(), '.php') &&
+		    !str_starts_with($f->getFilename(), '._'))
+			yield $f->getPathname();
+}
+
+/* set $config['key'] / $route['key'] in a CI3 config file */
+function ci_set(string $php, string $var, string $key, string $val): string
+{
+	$re = '~^\$' . $var . '\[\'' . preg_quote($key, '~') . '\'\]\s*=.*?;\s*$~m';
+	$line = "\${$var}['$key'] = $val;";
+	if (preg_match($re, $php))
+		return preg_replace($re, addcslashes($line, '\\$'), $php, 1);
+	return rtrim($php) . "\n$line\n";
+}
+
+$tmp = "$out.new";
+rm_tree($tmp);
+$nep = "$tmp/nep";
+
+/* CodeIgniter 3 */
+copy_tree("$deps/ci3/system", "$nep/system");
+foreach (php_files("$nep/system") as $f) {
+	$code = file_get_contents($f);
+	$new = php84_fixes($code);
+	if ($new !== $code)
+		put($f, $new);
+}
+$index = file_get_contents("$deps/ci3/index.php");
+$index = str_replace(
+	"define('ENVIRONMENT', isset(\$_SERVER['CI_ENV']) ? \$_SERVER['CI_ENV'] : 'development');",
+	"define('ENVIRONMENT', isset(\$_SERVER['CI_ENV']) ? \$_SERVER['CI_ENV'] : 'production');",
+	$index, $c);
+$c || fail('CI3 index.php: ENVIRONMENT line not found');
+put("$nep/index.php", php84_fixes($index));
+
+/* application: CI3 skeleton first, then NEP's own parts */
+$A = "$nep/application";
+copy_tree("$deps/ci3/application/config", "$A/config");
+foreach (['cache', 'logs', 'core', 'hooks', 'third_party', 'helpers'] as $d)
+	@mkdir("$A/$d", 0755, true);
+copy_tree("$app/language", "$A/language");
+copy_tree("$app/views", "$A/views");
+copy_tree("$deps/ci3/application/views/errors", "$A/views/errors");	/* CI3's */
+
+foreach (['controllers', 'models', 'libraries'] as $d) {
+	@mkdir("$A/$d", 0755, true);
+	foreach (scandir("$app/$d") as $f) {
+		if (!str_ends_with($f, '.php') || str_starts_with($f, '._'))
+			continue;
+		/* NEP's native-session class: CI3's session replaces it */
+		if ($d === 'libraries' && $f === 'Session.php') {
+			stat_add('dropped: libraries/Session.php');
+			continue;
+		}
+		/* encrypted with php_screw (a PHP 5-only extension): unusable */
+		if (str_starts_with(file_get_contents("$app/$d/$f", false, null, 0, 16), "\tHANDENG")) {
+			stat_add("dropped (php_screw-encrypted): $d/$f");
+			continue;
+		}
+		$name = ucfirst($f);
+		/* a controller whose class doesn't match its file name never
+		   worked (NEP's status2.php is a stale copy of status.php) */
+		if ($d === 'controllers' &&
+		    !preg_match('~^\s*class\s+' . preg_quote(pathinfo($name, PATHINFO_FILENAME), '~') . '\b~mi',
+				file_get_contents("$app/$d/$f"))) {
+			stat_add("dropped (class doesn't match the file name): $d/$f");
+			continue;
+		}
+		if ($name !== $f)
+			stat_add("renamed $d/*.php to Ucfirst");
+		put("$A/$d/$name", file_get_contents("$app/$d/$f"));
+	}
+}
+copy("$web/zlg_compat_helper.php", "$A/helpers/zlg_compat_helper.php");
+copy("$web/zlg_log_hook.php", "$A/hooks/Zlg_log_hook.php");
+put("$A/config/hooks.php", "<?php\ndefined('BASEPATH') OR exit('No direct script access allowed');\n" .
+	"\$hook['pre_system'] = array('class' => 'Zlg_log_hook', 'function' => 'install',\n" .
+	"\t'filename' => 'Zlg_log_hook.php', 'filepath' => 'hooks');\n");
+
+/* NEP's code: compat calls (controllers, models, libraries, views) */
+foreach (['controllers', 'models', 'libraries', 'views'] as $d) {
+	foreach (php_files("$A/$d") as $f) {
+		if (str_contains($f, '/views/errors/'))
+			continue;
+		$code = file_get_contents($f);
+		$new = compat_calls($code);
+		if ($d === 'views')
+			$new = view_edits($new);
+		else
+			$new = php84_fixes($new);
+		if ($new !== $code)
+			put($f, $new);
+	}
+}
+
+/* config: NEP's settings on CI3's files */
+$cfg = file_get_contents("$A/config/config.php");
+foreach ([
+	'base_url'		=> "'/nep/'",	/* works on any host and port */
+	'index_page'		=> "''",	/* lighttpd rewrites /nep/x to index.php */
+	'language'		=> "'english'",
+	'sess_driver'		=> "'files'",
+	'sess_cookie_name'	=> "'zlg_session'",
+	'sess_expiration'	=> '7200',
+	'sess_save_path'	=> "'/tmp/zlg-web-sess'",
+	'sess_match_ip'		=> 'FALSE',
+	'cookie_httponly'	=> 'TRUE',
+	'log_threshold'		=> '0',
+	'composer_autoload'	=> 'FALSE',
+	'enable_hooks'		=> 'TRUE',
+] as $k => $v)
+	$cfg = ci_set($cfg, 'config', $k, $v);
+put("$A/config/config.php", $cfg);
+
+$auto = file_get_contents("$A/config/autoload.php");
+$auto = ci_set($auto, 'autoload', 'libraries', "array('session')");
+$auto = ci_set($auto, 'autoload', 'helper', "array('url', 'file', 'zlg_compat')");
+put("$A/config/autoload.php", $auto);
+
+$routes = file_get_contents("$A/config/routes.php");
+$routes = ci_set($routes, 'route', 'default_controller', "'status'");
+$routes = ci_set($routes, 'route', 'translate_uri_dashes', 'FALSE');
+/* not reachable from the network: NEP's diagnostic and test pages */
+$routes .= "\n/* zlg-web-port: NEP's diagnostic and test pages are disabled */\n" .
+	   "\$route['home/info(/.*)?'] = 'status';\n" .
+	   "\$route['maildebug(/.*)?'] = 'status';\n" .
+	   "\$route['home/show(/.*)?'] = 'status';\n";
+put("$A/config/routes.php", $routes);
+
+/* document root: / redirects to the status page, as NEP's index.php did */
+put("$tmp/index.php", "<?php\nheader('Location: /nep/status/index/');\n");
+put("$tmp/robots.txt", "User-agent: *\nDisallow: /\n");
+
+/* sanity: every PHP file must parse under this PHP */
+$bad = 0;
+foreach (php_files($tmp) as $f) {
+	try {
+		token_get_all(file_get_contents($f), TOKEN_PARSE);
+	} catch (ParseError $e) {
+		$bad++;
+		fwrite(STDERR, "parse error: $f:" . $e->getLine() . ': ' . $e->getMessage() . "\n");
+	}
+}
+$bad && fail("$bad file(s) don't parse; $out left unchanged ($tmp kept)");
+
+ksort($stats);
+foreach ($stats as $k => $n)
+	note(sprintf('%5d  %s', $n, $k));
+
+if ($check) {
+	rm_tree($tmp);
+	note('check only: nothing installed');
+	exit(0);
+}
+
+/* swap in */
+rm_tree("$out.old");
+if (file_exists($out))
+	rename($out, "$out.old");
+rename($tmp, $out);
+rm_tree("$out.old");
+note("built $out");

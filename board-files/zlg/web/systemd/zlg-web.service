@@ -1,0 +1,18 @@
+[Unit]
+Description=ZLG gateway: web interface (Debian lighttpd + PHP 8.4)
+Wants=zlg-web-fpm.service
+After=zlg-web-fpm.service
+PartOf=zlg.target
+
+[Service]
+# 8080 next to ZLG's own server (zlg-httpd, port 80); see install-web.sh --switch
+Environment=ZLG_WEB_PORT=8080
+EnvironmentFile=-/etc/default/zlg
+ExecStartPre=/usr/sbin/lighttpd -tt -f /etc/zlg/lighttpd.conf
+ExecStart=/usr/sbin/lighttpd -D -f /etc/zlg/lighttpd.conf
+ExecReload=/bin/kill -USR1 $MAINPID
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=zlg.target

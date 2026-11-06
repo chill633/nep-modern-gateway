@@ -287,6 +287,9 @@ touch "$ROOTFS/etc/m6g2c-firstboot"
 
 # Migration kit for ZLG's gateway software (README section 9); installed on
 # the board with: sudo sh /usr/local/share/zlg/install.sh
+# the web interface's open-source parts (CodeIgniter 3, jQuery Migrate,
+# blockUI), pinned by checksum; README section 9b
+sh "$TOP/board-files/zlg/web/fetch-deps.sh" || die "could not fetch the web dependencies"
 rm -rf "$ROOTFS/usr/local/share/zlg"
 mkdir -p "$ROOTFS/usr/local/share/zlg"
 cp -r "$TOP/board-files/zlg/." "$ROOTFS/usr/local/share/zlg/"
