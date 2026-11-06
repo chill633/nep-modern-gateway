@@ -100,27 +100,8 @@ battery-backed PCF85063 RTC is used as the system clock (`/dev/rtc0`).
 
 ### Booting from the SD card
 
-The i.MX6UL must be told to boot from uSDHC1. On ZLG carriers this is set with
-the boot-mode DIP switch/jumpers (BOOT_MODE = internal boot, BOOT_CFG = SD on
-uSDHC1); see the carrier manual. On the EPC-M6G2C this is confirmed to work:
-the module's boot fuses don't lock it to NAND.
-
-**If your module ignores the switches** (ZLG may have burned the boot fuses
-for NAND), keep ZLG's NAND U-Boot and let it start this system from the card.
-At the factory U-Boot prompt:
-
-```
-mmc list                       # find the SD card's index, usually 0
-setenv sdboot 'mmc dev 0; ext4load mmc 0:1 0x82000000 /zImage; ext4load mmc 0:1 0x83000000 /dtbs/imx6ul-zlg-m6g2c.dtb; setenv bootargs console=ttymxc0,115200 root=/dev/mmcblk0p2 rootfstype=ext4 rootwait ro; bootz 0x82000000 - 0x83000000'
-run sdboot                     # try once
-setenv bootcmd 'run sdboot'; saveenv   # make it permanent
-```
-
-/boot is ext4 without a journal and without the `64bit` feature, so older
-vendor U-Boots such as ZLG's 2015.04 can read it with `ext4load` (or
-`ext2load`, which reads the same files). Plain ext2 was used before, but its
-timestamps end in January 2038, which Debian 13's 64-bit `time_t` userland
-goes past.
+The i.MX6UL must be told to boot from uSDHC1. On the BDG-256 there is a
+switch under the corner of the LCD display. Change it from NVRAM to SD.
 
 ---
 
