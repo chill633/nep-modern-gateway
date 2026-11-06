@@ -241,7 +241,8 @@ send_alert_*.sh cron lines are commented out in ginit.sh).
 checked. The report controller's send() uses smtp_host from that file.
 
 zlg-web-port blocks (routes to status) home/info, home/show,
-maildebug and report/send. The routes use `(?i)`: CodeIgniter finds the controller file by
+maildebug and report/send; README section 7 lists them, the outbound connections and the
+email-report findings. The routes use `(?i)`: CodeIgniter finds the controller file by
 ucfirst() and PHP methods are case-insensitive, so without it
 /nep/Home/info and /nep/Maildebug/index were still reachable. Verified on both units with variants (Report/send,
 report/SEND, ...); /nep/report/day etc. still work (gene.sh needs them).
@@ -276,7 +277,10 @@ report/SEND, ...); /nep/report/day etc. still work (gene.sh needs them).
   (each branch describes its own firmware first), section 9's 20230903
   test record, and section 9's line about the shared parts running on the
   other gateway (nep-fw-20210303 points to the 20230903 branch's README;
-  nep-fw-20230903 points to the start of its own section 9). When merging nep-fw-20210303 into nep-fw-20230903,
+  nep-fw-20230903 points to the start of its own section 9), and section
+  7's "Email reports" bullet (nep-fw-20210303: off on the production unit;
+  nep-fw-20230903: off on the 20210303 gateway, not checked on the 20230903
+  one). When merging nep-fw-20210303 into nep-fw-20230903,
   keep nep-fw-20230903's wording there (the top note conflicted once,
   2026-11-06), and check that board-files/zlg/nep-firmware still says
   20230903.
