@@ -247,6 +247,36 @@ ucfirst() and PHP methods are case-insensitive, so without it
 /nep/Home/info and /nep/Maildebug/index were still reachable. Verified on both units with variants (Report/send,
 report/SEND, ...); /nep/report/day etc. still work (gene.sh needs them).
 
+## Power-line modem and inverter discovery (2026-11-06)
+
+Read from the binaries and scripts only; nothing was run.
+- The Old unit's PLC module is an Eastsoft ES1642 (its 2021 gateway-plc and
+  plc_set know only ES1642). gateway-plc sets a network password and PLC
+  address on it at start-up, so it likely only exchanges frames within its
+  own network: passive listening would probably show only the user's own
+  inverters (not confirmed). Firmware 20230903 also supports the ES1670
+  (a CCO with a node whitelist built from plc_id.conf and a route table).
+- Inverters answer polls; finding unconfigured ones needs an active scan.
+  Only firmware 20230903's plc_set has it: `plc_set -p 00000 -m EXT`
+  broadcasts to address 00000 and writes answering nodes to plc_new.conf
+  (also comm_id.conf); /usr/local/bin/scan_plcid wraps it (kills
+  gateway-plc, N rounds). plc_new.conf exists on neither unit, so no scan
+  has run. The Old unit's plc_set only sends commands to a configured index
+  (-j -p -i -c -d -k -r). Running the new plc_set -m on the Old unit: not
+  done, not recommended without a reason (stops readings, transmits
+  broadcasts, untested with the old files, contains code that writes
+  plc_id.conf: back it up first; inverters only answer in daylight).
+- Offered to the user and not chosen for now: a day-long logging
+  pass-through of /dev/ttymxc1 (pty relay, two ~1-minute gaps in the
+  readings).
+- PVG = NEP's PVG-2 module-level rapid-shutdown devices with monitoring;
+  the user has none (comm_device=0, pvg_scanner=0). gateway-scan (Qt scanner
+  for PVG IDs), pvg_scan_code, pvg_tx_code and pvgtxcode/ are for them and
+  irrelevant here.
+- /usr/local/bin/sys_ctrl (20230903) broadcasts on/off to all inverters:
+  with comm_device=0 via `plc_set -p 00000 -z -c 0001...b0...` (on) or
+  `...01...` (off). Nothing runs it; never run it.
+
 ## Repository and access
 
 - GitHub: chill633/nep-modern-gateway (private; renamed from chill633/claude,
