@@ -695,7 +695,7 @@ trixie image:**
 * NEP's gateway software from `/srv/zlg`: `gateway-plc` (with the serial
   port to the inverters open), `gateway-pctrl`, the touch-screen HMI and
   the cron jobs, with PHP 8.4 for the command-line scripts. The hostname
-  became `NEP-` and the last five digits of its serial number.
+  became `NEP-yyyyy`.
 * Local-only mode: `gateway-mqtt-nep` isn't started, the crontab keeps only
   its local jobs, and the board has no connections to the outside.
 * The web interface on port 80, checked in the browser: status page,
