@@ -117,8 +117,13 @@ user's LAN advertises NAT64 v6 addresses that don't route) mounted over
 from 2015). Location from /root/Gateway/location (woeid, lon, lat) or
 ZLG_WEATHER_LAT/LON; the factory value is near Jinan, China. The board has
 ZLG_WEATHER_LAT / ZLG_WEATHER_LON (the user's location) in /etc/default/zlg.
-Only the Info page (info/index) shows the weather: NEP's footer has no #wt
-element and the status page's uw() call is commented out in NEP's code.
+zlg-web-port restores the status page's weather line (adds #wt to NEP's empty
+ui-state-highlight bar, uncomments uw()); the Info page (info/index) shows it
+too, linked as "Weather" after Layout in the menu (added by the port). web/Googlemaps.php replaces NEP's Google Static Maps
+library (maps.google.cn, no key) with an OpenStreetMap iframe, same API,
+position from weather.conf first. The port lints application files with
+php -l (--no-lint for qemu tests); it caught nothing before because a
+repeated #[AllowDynamicProperties] is a compile error, not a parse error.
 
 ## Working with the user
 

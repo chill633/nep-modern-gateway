@@ -525,7 +525,9 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   CodeIgniter 2.1.3 -> 3.1.13, Debian's jQuery 3 and jQuery UI 1.13 with
   jQuery Migrate, Highcharts 2.3.3 -> 13.1.1 (free for personal use; NEP's
   chart look kept by `js/zlg-highcharts.js`), simpletooltip -> jQuery UI's
-  tooltip, Modernizr dropped, PHP 8 fixes (null-safe `count()` and friends, zeros instead
+  tooltip, Modernizr dropped, the Info page's map from OpenStreetMap
+  (NEP's asked Google's Static Maps API without a key: a broken image), the
+  status page's weather line back on, PHP 8 fixes (null-safe `count()` and friends, zeros instead
   of a failed page while `gateway-plc` restarts). It leaves out
   `controllers/proxy.php` (encrypted with `php_screw`, PHP 5 only), a dead `status2.php`, and makes
   `home/info`, `home/show` and `maildebug` unreachable.
@@ -582,6 +584,9 @@ settings page (`/root/Gateway/location`), or `ZLG_WEATHER_LAT` /
 `ZLG_WEATHER_LON` in `/etc/default/zlg`. It connects over IPv4 only:
 networks that hand out NAT64 IPv6 addresses without a working IPv6 route
 would otherwise make every request time out. `ZLG_WEATHER=0` keeps NEP's.
+The weather shows on the status page (the bar above the inverter boxes) and
+on the Info page (**Weather** in the menu, `http://<board>/nep/info/index`),
+together with a map of the same location.
 
 ## 7. Layout
 

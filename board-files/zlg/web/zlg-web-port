@@ -11,6 +11,7 @@
  *   --web   this kit's web files: /usr/local/share/zlg/web
  *   --out   new document root:   /srv/zlg/www   (built next to it, then swapped)
  *   --check only report what would change
+ *   --no-lint skip the php -l pass (for testing under emulation)
  *
  * NEP's code is not part of this kit: it is converted on the board from the
  * copy in /srv/zlg, and the original stays untouched. Re-run after
@@ -35,7 +36,7 @@
  *  - files encrypted with php_screw (controllers/proxy.php) can't run on PHP 8 and are left out
  */
 
-$opt = getopt('', ['src:', 'deps:', 'web:', 'out:', 'check']);
+$opt = getopt('', ['src:', 'deps:', 'web:', 'out:', 'check', 'no-lint']);
 $src  = rtrim($opt['src']  ?? '/srv/zlg/root/Gateway/nep', '/');
 $web  = rtrim($opt['web']  ?? '/usr/local/share/zlg/web', '/');
 $deps = rtrim($opt['deps'] ?? "$web/deps", '/');
@@ -128,6 +129,15 @@ function view_edits(string $v): string
     })',
 		/* Modernizr 1.7: nothing uses the class it sets */
 		'~<script[^>]*src="[^"]*static/js/modernizr-transitions\.js"[^>]*>\s*</script>\s*~' => '',
+		/* the status page's weather line: NEP left an empty bar and
+		   commented out the call that fills it */
+		'~(<div class="ui-state-highlight ui-corner-all"[^>]*>)\s*(</div>)~'
+			=> '$1<span id="wt"></span>$2',
+		'~/\*\s*uw\(\);\s*\*/~' => 'uw(); setInterval(uw, 1800000);',
+		/* a "Weather" menu entry for the Info page (weather and map),
+		   which NEP's menu doesn't link to */
+		'~(<li><a href="[^"]*info/page/"[^>]*>.*?lang_navi_Layout.*?</a></li>)~'
+			=> '$1' . "\n" . '              <li><a href="<?php echo base_url();?>info/index" title="">Weather</a></li>',
 		/* jQuery 1.9 changed .attr() for form state: .attr("checked")
 		   and .attr("value") now return the HTML attribute, not the
 		   current state, so the status page's auto-refresh never ran and
@@ -166,7 +176,8 @@ function view_edits(string $v): string
    classes) use everywhere; PHP 8.4 deprecates E_STRICT. */
 function php84_fixes(string $code): string
 {
-	$code = preg_replace('~^((?:abstract\s+|final\s+)?class\s+\w+)~m',
+	/* (not where it's already there: PHP refuses a repeated attribute) */
+	$code = preg_replace('~^(?<!\]\n)((?:abstract\s+|final\s+)?class\s+\w+)~m',
 		"#[\\AllowDynamicProperties]\n\$1", $code, -1, $c);
 	if ($c)
 		stat_add('classes: #[AllowDynamicProperties]', $c);
@@ -275,6 +286,12 @@ foreach (['controllers', 'models', 'libraries'] as $d) {
 			stat_add("dropped (php_screw-encrypted): $d/$f");
 			continue;
 		}
+		/* NEP's Google Static Maps library (no API key: a broken image) */
+		if ($d === 'libraries' && $f === 'Googlemaps.php') {
+			copy("$web/Googlemaps.php", "$A/libraries/Googlemaps.php");
+			stat_add('replaced: libraries/Googlemaps.php (OpenStreetMap)');
+			continue;
+		}
 		$name = ucfirst($f);
 		/* a controller whose class doesn't match its file name never
 		   worked (NEP's status2.php is a stale copy of status.php) */
@@ -358,6 +375,16 @@ foreach (php_files($tmp) as $f) {
 		$bad++;
 		fwrite(STDERR, "parse error: $f:" . $e->getLine() . ': ' . $e->getMessage() . "\n");
 	}
+}
+/* and compile (php -l): catches errors the tokenizer doesn't, such as a
+   repeated attribute; the application files, CodeIgniter's are known good */
+foreach (isset($opt['no-lint']) ? [] : php_files("$tmp/nep/application") as $f) {
+	exec(escapeshellarg(PHP_BINARY) . ' -n -l ' . escapeshellarg($f) . ' 2>&1', $o, $rc);
+	if ($rc !== 0) {
+		$bad++;
+		fwrite(STDERR, "compile error: $f: " . trim(implode(' ', $o)) . "\n");
+	}
+	$o = [];
 }
 $bad && fail("$bad file(s) don't parse; $out left unchanged ($tmp kept)");
 
