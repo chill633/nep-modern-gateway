@@ -621,13 +621,12 @@ A fresh install starts the new server on port 8080, next to ZLG's on port
 80. `sudo sh /usr/local/share/zlg/web/install-web.sh --switch` moves it to
 port 80 and stops ZLG's; `--revert` goes back.
 
-* **Same NEP version as the production unit** (the "Old" version, without
-  `gateway-mqtt-nep`): the port has been verified page by page against
-  ZLG's server, so run `--switch` right after installing; there is nothing
-  to compare.
-* **Firmware 20230903:** use the `nep-fw-20230903` branch, where the same
-  holds; it was checked page by page in the browser on a 20230903 gateway.
-  (NEP's own server shows nothing there, so there is nothing to compare.)
+* **Firmware 20230903 (this branch's firmware):** the port was checked
+  page by page in the browser on a 20230903 gateway, so run `--switch`
+  right after installing. NEP's own server shows nothing on this firmware,
+  so there is nothing to compare.
+* **Firmware 20210303:** use the `nep-fw-20210303` branch. There the port
+  was verified page by page against ZLG's server, so the same holds.
 * **Any other NEP version:** its pages and code haven't been through the
   port yet. Compare `http://<board>:8080/` with ZLG's `http://<board>/`
   first, check `journalctl -u zlg-web-fpm` for PHP errors, and switch once
