@@ -6,6 +6,7 @@
 #   zlg-chroot shell               a shell inside, with ZLG's environment
 #   zlg-chroot offset              update the clock offset (zlg-offset.timer)
 #   zlg-chroot run DIR CMD [ARG..] run CMD in DIR inside (the services use this)
+#   zlg-chroot local-only-off      exit 1 in local-only mode (zlg-mqtt.service)
 #
 # Left out of ZLG's start-up on purpose, because Debian does it or because it
 # would disturb Debian: hwclock, ifconfig/udhcpc (eth0, wlan0), inetd,
@@ -179,10 +180,12 @@ start() {
 		[ -f "$ROOT$f" ] || continue
 		# BusyBox crond may reset PATH: give every job the stand-ins
 		# ZLG_LOCAL_ONLY=1: no uploads to NEP's cloud (my_nsync -> nsync ->
-		# php remote, to nepviewer.com). gdata.sh stays: its lsync runs
-		# php proxy, which writes the web pages' per-inverter status files.
+		# php remote, to nepviewer.com; newer firmware's critical_alert.php,
+		# which posts alerts to nepviewer.com). gdata.sh stays: its lsync
+		# runs php proxy, which writes the web pages' per-inverter status
+		# files. zlg-mqtt.service skips gateway-mqtt-nep, NEP's MQTT link.
 		if [ "${ZLG_LOCAL_ONLY:-0}" = 1 ]; then
-			sed -i -E '/my_nsync|killall nsync/d' "$ROOT$f"
+			sed -i -E '/my_nsync|killall nsync|critical_alert\.php/d' "$ROOT$f"
 		fi
 		sed -i -E -e '/plc\.sh/d' \
 			-e '/^[[:space:]]*(#|$)/!s#^(([^[:space:]]+[[:space:]]+){5})#\1export PATH=/m6g2c/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin; #' \
@@ -297,6 +300,7 @@ start) start ;;
 offset) write_offset ;;
 stop) stop ;;
 shell) env_run /bin/sh -l ;;
+local-only-off) [ "${ZLG_LOCAL_ONLY:-0}" != 1 ] ;;
 run)
 	[ $# -ge 3 ] || { echo "usage: zlg-chroot run DIR CMD [ARG...]" >&2; exit 2; }
 	dir=$2; shift 2

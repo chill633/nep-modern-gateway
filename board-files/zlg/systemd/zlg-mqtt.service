@@ -8,6 +8,9 @@ PartOf=zlg.target
 # skipped (not failed) when this version of ZLG's software doesn't have it;
 # checked inside /srv/zlg, where its links point
 ExecCondition=/usr/local/sbin/zlg-chroot run / /bin/sh -c "test -e /root/Gateway/mqtt/gateway-mqtt-nep"
+# it is a permanent link to NEP's cloud (broker.nepviewer.com:8883):
+# skipped too in local-only mode (ZLG_LOCAL_ONLY=1 in /etc/default/zlg)
+ExecCondition=/usr/local/sbin/zlg-chroot local-only-off
 ExecStart=/usr/local/sbin/zlg-chroot run /root/Gateway/mqtt ./gateway-mqtt-nep
 Restart=always
 RestartSec=10
