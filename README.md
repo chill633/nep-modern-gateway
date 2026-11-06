@@ -1,4 +1,4 @@
-# Debian trixie (armhf) SD-card image for the ZLG M6G2C-256LI
+# Debian trixie (armhf) SD-card image for the NEP BDG-256 Gateway (ZLG M6G2C-256LI)
 
 Build kit that produces a bootable SD-card image for the ZLG **M6G2C-256LI**
 core module:
@@ -390,7 +390,8 @@ stage applies every patch in `patches/linux/`.
 The dongle that ships with the EPC-M6G2C works with the in-kernel
 `rtl8xxxu` driver: v2/v3 (USB ID 2357:0109) use the RTL8192EU chip, v1 the
 RTL8192CU. Its firmware comes from Debian's `firmware-realtek` package. Plug
-it into either USB port; `lsusb` shows which version you have.
+it into the USB-A port on the bottom of the Gateway; `lsusb` shows which
+version you have.
 
 Set the network in `local.env` (next to `config.env`; keep it private):
 
@@ -569,11 +570,21 @@ sudo systemctl restart zlg.target
 sudo sh zlg/web/install-web.sh          # new server on port 8080
 ```
 
-On a fresh install the new server starts on port 8080, next to ZLG's on
-port 80, so the two can be compared; `sudo sh
-/usr/local/share/zlg/web/install-web.sh --switch` then moves it to port 80
-and stops ZLG's, and `--revert` goes back. Once switched (as on the
-production unit), re-running `install-web.sh` keeps port 80. After
+A fresh install starts the new server on port 8080, next to ZLG's on port
+80. `sudo sh /usr/local/share/zlg/web/install-web.sh --switch` moves it to
+port 80 and stops ZLG's; `--revert` goes back.
+
+* **Same NEP version as the production unit** (the "Old" version, without
+  `gateway-mqtt-nep`): the port has been verified page by page against
+  ZLG's server, so run `--switch` right after installing; there is nothing
+  to compare.
+* **A different NEP version** (for example the newer one with
+  `gateway-mqtt-nep`): its pages and code haven't been through the port
+  yet. Compare `http://<board>:8080/` with ZLG's `http://<board>/` first,
+  check `journalctl -u zlg-web-fpm` for PHP errors, and switch once
+  everything matches.
+
+Once switched, re-running `install-web.sh` keeps port 80. After
 `zlg-import`, re-run `install-web.sh --rebuild`.
 
 ZLG's command-line PHP (the cron jobs' `php proxy`, which writes the status
