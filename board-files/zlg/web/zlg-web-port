@@ -147,6 +147,10 @@ function view_edits(string $v): string
 		'~<td>Sunrise</td>~' => "<td><?php echo lang('lang_weather_map_sunrise');?></td>",
 		'~<td>Sunset</td>~' => "<td><?php echo lang('lang_weather_map_sunset');?></td>",
 		'~<td>Conditions</td>~' => "<td><?php echo lang('lang_weather_map_conditions');?></td>",
+		/* the footer's version: this build's, not NEP's (NEP's
+		   /opt/config/version stays as it is for its own pages) */
+		'~<\?php echo file_get_contents\(\'/opt/config/version\'\);\s*\?>~'
+			=> 'Version 1.00-chill633',
 		/* jQuery 1.9 changed .attr() for form state: .attr("checked")
 		   and .attr("value") now return the HTML attribute, not the
 		   current state, so the status page's auto-refresh never ran and

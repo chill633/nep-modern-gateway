@@ -62,6 +62,9 @@ count()/implode()/sort()/shmop_read() -> zlg_ compat functions,
 port ZLG_WEB_PORT, 8080 until install-web.sh --switch). Deps pinned in
 fetch-deps.sh (deps/ is git-ignored).
 
+The footer shows "Version 1.00-chill633" (zlg-web-port replaces the echo
+of NEP's /opt/config/version, which NEP's info and log pages still read).
+
 base_url must be a full URL (built from HTTP_HOST in config.php): NEP calls
 redirect(base_url()."..."), and CI3's redirect() prepends the base again to
 anything without "://" (a relative '/nep/' broke Manage layout, login and
