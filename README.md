@@ -572,6 +572,17 @@ the copy and mounts a wrapper over `/opt/php5/bin/php`, which starts
 scripts stay unchanged, and apt keeps the PHP patched. `ZLG_PHP84_CLI=0` in
 `/etc/default/zlg` goes back to ZLG's PHP 5.4.
 
+The weather on the pages comes from `zlg-weather` (`board-files/zlg/
+zlg-weather.php`), which `zlg-chroot` mounts over NEP's `wea`: NEP's asked
+Yahoo's weather service, which closed in 2019. It fetches today's forecast
+from [Open-Meteo](https://open-meteo.com) (free, no API key, non-commercial
+use) once an hour, when NEP's `gene.sh` calls `wea`, and writes it in wea's
+format. The location is the longitude/latitude on the gateway's General
+settings page (`/root/Gateway/location`), or `ZLG_WEATHER_LAT` /
+`ZLG_WEATHER_LON` in `/etc/default/zlg`. It connects over IPv4 only:
+networks that hand out NAT64 IPv6 addresses without a working IPv6 route
+would otherwise make every request time out. `ZLG_WEATHER=0` keeps NEP's.
+
 ## 7. Layout
 
 ```

@@ -111,7 +111,14 @@ Browser testing: headless Firefox (snap) driven over Marionette (a small
 Python client; profile under ~/snap/firefox/common), probing
 Highcharts.charts and jQuery UI widget instances, plus screenshots.
 
-Open: perhaps a working weather source for wea (Yahoo YQL is gone).
+Weather (2026-11-06): zlg-weather.php (Open-Meteo, IPv4 only because the
+user's LAN advertises NAT64 v6 addresses that don't route) mounted over
+/opt/php5/bin/wea; CA bundle copied to /m6g2c/ca-certificates.crt (ZLG's are
+from 2015). Location from /root/Gateway/location (woeid, lon, lat) or
+ZLG_WEATHER_LAT/LON; the factory value is near Jinan, China. The board has
+ZLG_WEATHER_LAT / ZLG_WEATHER_LON (the user's location) in /etc/default/zlg.
+Only the Info page (info/index) shows the weather: NEP's footer has no #wt
+element and the status page's uw() call is commented out in NEP's code.
 
 ## Working with the user
 

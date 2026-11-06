@@ -10,6 +10,7 @@ cd "$(dirname "$0")"
 }
 install -m 755 zlg-import zlg-chroot /usr/local/sbin/
 install -D -m 644 zlg-time.so /usr/local/lib/zlg/zlg-time.so
+install -D -m 644 zlg-weather.php /usr/local/lib/zlg/zlg-weather.php
 [ -e /etc/default/zlg ] || install -m 644 zlg.default /etc/default/zlg
 install -m 644 systemd/*.service systemd/*.target systemd/*.path systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
