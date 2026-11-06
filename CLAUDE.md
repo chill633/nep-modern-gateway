@@ -181,9 +181,14 @@ building without NAND (M6G2C_ENABLE_NAND=0). zlg-import from the NAND stays.
 
 - Hardware access is only through the user: they run commands on the board
   and paste output; serial console is output-only (TX not connected).
-- Board: `debian@192.168.1.183` on Wi-Fi. Hostname `m6g2c` until zlg-chroot
-  sets `NEP-<last 5 of SN>` (NEP-xxxxx: the last five characters of the serial;
-  set_hostname, ZLG_HOSTNAME=0 to keep it).
+- Board: `debian@192.168.1.183` on Wi-Fi, hostname **NEP-xxxxx** (since
+  2026-11-06; was m6g2c). zlg-chroot's set_hostname names the board
+  `NEP-<last 5 characters of SN=>` from /srv/zlg/root/Gateway/sn (serial
+  not recorded here) at each zlg-chroot start, updating /etc/hostname and the
+  127.0.1.1 line in /etc/hosts; a fresh card is m6g2c (HOSTNAME_TARGET)
+  until zlg-import. ZLG_HOSTNAME=0 in /etc/default/zlg keeps the name.
+  Verified on the board. The router may know the board by its old name
+  until the next DHCP renewal; use the IP address.
 - `local.env` holds the Wi-Fi credentials; it is git-ignored. Keep it out of
   commits and shared files.
 - Earlier tools: tools/decode-pinctrl.py, gpmi-raw-analyze.py, wpa-conf.py.
