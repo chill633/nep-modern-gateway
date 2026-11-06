@@ -38,10 +38,16 @@ tree, and a **Debian 13 "trixie" armhf** root filesystem.
 > **NEP firmware 20210303.** This branch, `nep-fw-20210303`, is for gateways
 > running NEP firmware major version **20210303** (`major=` in the
 > `[version]` section of `/root/Gateway/gateway.cfg`), whose local web
-> interface still works. Gateways with firmware **20230903**, where NEP
-> disabled the local web interface, get their own branch, `nep-fw-20230903`.
-> `zlg-import` and `install-web.sh` check the version and stop on a
-> mismatch (section 7).
+> interface still works. `zlg-import` and `install-web.sh` check the
+> version and stop on a mismatch (section 7).
+>
+> Gateways with firmware **20230903** use the branch `nep-fw-20230903`. That
+> firmware runs on the same hardware with the same web pages, but NEP hides
+> the pages (its boot script renames the front pages to `.bak`) and adds two
+> links to its cloud, which local-only mode cuts. The kit brings the pages
+> back. It runs on a second gateway with firmware 20230903 (the "New" unit),
+> with the web interface on port 80; that branch's README has its test
+> record.
 
 > **Status:** this image runs in production on the EPC-M6G2C it was
 > developed on, together with NEP's gateway software and the modernised web
@@ -619,11 +625,14 @@ port 80 and stops ZLG's; `--revert` goes back.
   `gateway-mqtt-nep`): the port has been verified page by page against
   ZLG's server, so run `--switch` right after installing; there is nothing
   to compare.
-* **A different NEP version** (for example the newer one with
-  `gateway-mqtt-nep`): its pages and code haven't been through the port
-  yet. Compare `http://<board>:8080/` with ZLG's `http://<board>/` first,
-  check `journalctl -u zlg-web-fpm` for PHP errors, and switch once
-  everything matches.
+* **Firmware 20230903:** use the `nep-fw-20230903` branch, where the same
+  holds; it was checked page by page in the browser on a 20230903 gateway.
+  (NEP's own server shows nothing there, so there is nothing to compare.)
+* **Any other NEP version:** its pages and code haven't been through the
+  port yet. Compare `http://<board>:8080/` with ZLG's `http://<board>/`
+  first, check `journalctl -u zlg-web-fpm` for PHP errors, and switch once
+  everything matches. The installers' firmware check stops first; pass
+  `--any-firmware` to go ahead.
 
 Once switched, re-running `install-web.sh` keeps port 80. After
 `zlg-import`, re-run `install-web.sh --rebuild`.
