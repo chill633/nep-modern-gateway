@@ -159,9 +159,11 @@ The user edits the README's wording; keep their decisions:
   Ethernet or Wi-Fi (5a). After section 7's setup, zlg-hmi owns tty1.
 - 5a Wi-Fi: the dongle goes in the USB-A port on the bottom of the Gateway.
 - Sections run in order: 5a Wi-Fi, 5b Display, 5c MI200E, 6, 7 NEP software
-  (7a web interface), 8 Layout, 9 What has been tested. Script comments and
-  zlg-chroot's error message say "README section 7" / "7a" (the board's
-  installed copies still say 9 until the next install).
+  with its one subsection 7a web interface (it was briefly 7b; subsections
+  are lettered from a, as 4a under 4), 8 Layout, 9 What has been tested.
+  Script comments and zlg-chroot's error message say "README section 7";
+  03-rootfs.sh's comment says "7a". The board's installed copies are
+  current (installed after the renumbering).
 - 7a: with the same NEP version as the production unit ("Old"), run
   install-web.sh --switch right away; compare on port 8080 only for a
   different NEP version.
