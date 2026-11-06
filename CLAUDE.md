@@ -53,7 +53,7 @@ on (`ZLG_LOCAL_ONLY=1`, no cloud uploads).
 
 ## Web interface on Debian's lighttpd + PHP 8.4 (2026-11-06)
 
-board-files/zlg/web/ (README 7b): zlg-web-port (PHP, runs on the board)
+board-files/zlg/web/ (README 7a): zlg-web-port (PHP, runs on the board)
 converts /srv/zlg/root/Gateway/nep -> /srv/zlg/www (CI 2.1.3 -> 3.1.13 with
 CI3's config files + NEP's settings, Ucfirst controllers, tokenizer-based
 count()/implode()/sort()/shmop_read() -> zlg_ compat functions,
@@ -159,10 +159,10 @@ The user edits the README's wording; keep their decisions:
   Ethernet or Wi-Fi (5a). After section 7's setup, zlg-hmi owns tty1.
 - 5a Wi-Fi: the dongle goes in the USB-A port on the bottom of the Gateway.
 - Sections run in order: 5a Wi-Fi, 5b Display, 5c MI200E, 6, 7 NEP software
-  (7b web interface), 8 Layout, 9 What has been tested. Script comments and
-  zlg-chroot's error message say "README section 7" / "7b" (the board's
+  (7a web interface), 8 Layout, 9 What has been tested. Script comments and
+  zlg-chroot's error message say "README section 7" / "7a" (the board's
   installed copies still say 9 until the next install).
-- 7b: with the same NEP version as the production unit ("Old"), run
+- 7a: with the same NEP version as the production unit ("Old"), run
   install-web.sh --switch right away; compare on port 8080 only for a
   different NEP version.
 

@@ -485,7 +485,7 @@ original programs unchanged, from a copy of the factory root filesystem in
 | `zlg-pctrl` | `gateway-pctrl` | `/usr/local/bin/gateway` |
 | `zlg-mqtt` | `gateway-mqtt-nep` (NEP's cloud) | `/usr/local/bin/gateway`, `plc.sh` |
 | `zlg-hmi` | `gateway-hmi -qws` (touch screen, takes over `tty1`) | `/usr/local/bin/gateway`, `plc.sh` |
-| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 7b; off on the production unit) | `rcS` |
+| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 7a; off on the production unit) | `rcS` |
 | `zlg-cron` | ZLG's crontab (uploads, reports, the 01:00 daily clean) | `ginit.sh` |
 
 Each is restarted 10 s after it stops, which replaces `plc.sh`'s checks.
@@ -548,7 +548,7 @@ systemctl list-units 'zlg*'
 * Only one system talks to the inverters at a time anyway: the board runs
   either the SD card or the NAND.
 
-### 7b. The web interface on Debian's lighttpd and PHP 8.4
+### 7a. The web interface on Debian's lighttpd and PHP 8.4
 
 ZLG's web server (lighttpd + PHP 5.4.12 from 2013, `zlg-httpd`) is no longer maintained. `board-files/zlg/web/` replaces it with Debian's lighttpd and
 PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
@@ -647,7 +647,7 @@ board-files/u-boot/         board/zlg/m6g2c, defconfig, config header, U-Boot DT
 board-files/linux/          kernel DTS, config fragment, drivers/ (MI200E PLC driver)
 board-files/rootfs/         first-boot resize/SSH-key service
 board-files/zlg/            runs ZLG's gateway software in /srv/zlg (section 7)
-board-files/zlg/web/        NEP's web interface on lighttpd + PHP 8.4 (section 7b)
+board-files/zlg/web/        NEP's web interface on lighttpd + PHP 8.4 (section 7a)
 tools/                      factory hardware dump, pinctrl decoder, DCD/DDR decoder,
                             watchdog-GPIO finder
 ```
@@ -665,7 +665,7 @@ the trixie image:**
 * NEP's gateway software from `/srv/zlg` (section 7): inverter data over the
   serial PLC module on `/dev/ttymxc1`, the touch-screen HMI, the cron jobs
   and reports, with local-only mode on.
-* The web interface on Debian's lighttpd and PHP 8.4 (section 7b): every
+* The web interface on Debian's lighttpd and PHP 8.4 (section 7a): every
   page compared with ZLG's own server and confirmed in the browser, then
   switched to port 80: status page with live inverter boxes, Energy Output
   charts (Highcharts 13), Alert, Layout including Manage layout and moving
