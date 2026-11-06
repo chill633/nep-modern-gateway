@@ -561,6 +561,19 @@ systemctl list-units 'zlg*'
   `broker.nepviewer.com`. Data collection,
   the reports and the local web pages carry on; the pages' per-inverter
   status files come from `gdata.sh` -> `lsync` -> `php proxy`, which is local.
+* **What the gateway connects to,** with local-only mode on: Open-Meteo once
+  an hour for the weather (`api.open-meteo.com`, HTTPS), Debian's time
+  servers (`systemd-timesyncd`), Debian's package servers only when `apt`
+  runs (the automatic daily updates are off), and DHCP and DNS on the local
+  network. The map on the Weather page is loaded by your browser from
+  OpenStreetMap, not by the gateway. NEP's own programs are closed source;
+  no connection from them to the outside has been seen.
+* **Email reports** are NEP's, built hourly by `gene.sh`, and are off on the
+  production unit: the report switches in `/opt/config/report` are all
+  `0`, no recipient is set (`/opt/config/general`), and the jobs that would
+  send them are commented out in NEP's `ginit.sh`. `/opt/config/email`
+  holds NEP's own factory mail settings, not
+  yours.
 * Programs a given NEP version doesn't have (older ones have no
   `gateway-mqtt-nep`) are skipped, not restarted in a loop.
 * `zlg-import` refuses to replace an existing `/srv/zlg` without `--force`,
@@ -585,7 +598,8 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   status page's weather line back on, PHP 8 fixes (null-safe `count()` and friends, zeros instead
   of a failed page while `gateway-plc` restarts). It leaves out
   `controllers/proxy.php` (encrypted with `php_screw`, PHP 5 only), a dead `status2.php`, and makes
-  `home/info`, `home/show`, `maildebug` and `report/send` unreachable.
+  `home/info`, `home/show`, `maildebug` and `report/send` unreachable, in any
+  capitalisation.
 * `zlg-web-fpm` runs PHP 8.4 chrooted into `/srv/zlg` as `www-data`, with the
   shifted clock (`zlg-time.so`, which now also covers Debian 13's 64-bit
   time calls). `zlg-web` is lighttpd in front of it.
