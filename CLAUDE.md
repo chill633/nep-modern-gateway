@@ -207,9 +207,12 @@ Made on nep-fw-20210303 and merged into nep-fw-20230903:
   git-ignored board-files/zlg/web/deps/ and board-files/zlg/zlg-time.so
   into the worktree first.
 - Parts of the README differ per branch on purpose: the firmware note and
-  the Status note at the top, the 7a list of when to compare on port 8080
-  (each branch describes its own firmware first), and section 9's
-  20230903 test record. When merging nep-fw-20210303 into nep-fw-20230903,
+  the Status note at the top, the summary's second paragraph (20230903 adds
+  the restored local pages and cut cloud links), section 7's zlg-httpd row
+  and hostname example (NEP-xxxxx / NEP-yyyyy), 7a's "installed and running
+  on port 80 on ..." line and its list of when to compare on port 8080
+  (each branch describes its own firmware first), and section 9's 20230903
+  test record. When merging nep-fw-20210303 into nep-fw-20230903,
   keep nep-fw-20230903's wording there (the top note conflicted once,
   2026-11-06), and check that board-files/zlg/nep-firmware still says
   20230903.
