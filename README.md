@@ -621,6 +621,11 @@ sudo systemctl restart zlg.target
 sudo sh zlg/web/install-web.sh          # new server on port 8080
 ```
 
+`install-web.sh` checks the NEP firmware version first (section 7). On a
+fresh install it also restarts ZLG's services once at the end: `zlg-chroot`
+can switch ZLG's command-line PHP (the cron jobs' `php proxy`, the weather,
+the reports) to PHP 8.4 only if PHP 8.4 was installed when it started.
+
 A fresh install starts the new server on port 8080, next to ZLG's on port
 80. `sudo sh /usr/local/share/zlg/web/install-web.sh --switch` moves it to
 port 80 and stops ZLG's; `--revert` goes back.
@@ -727,6 +732,11 @@ the trixie image:**
 * ZLG's command-line PHP on PHP 8.4: `php proxy` writes the same 127 files
   as under PHP 5 (apart from timestamps); the hourly reports are generated.
 * The weather from Open-Meteo for the configured location.
+* The NEP firmware check: `install-web.sh` reports "NEP firmware 20210303:
+  matches this kit"; the board's hostname became `NEP-xxxxx`.
+* The shared parts (U-Boot, kernel, Debian, the ZLG set-up, the web
+  interface) also run on the gateway with firmware 20230903; its test
+  record is at the start of this section.
 
 **Not tested, because this unit doesn't use them:** the MI200E power-line
 modems (this unit uses the serial PLC module; its MI200E modems fail their
