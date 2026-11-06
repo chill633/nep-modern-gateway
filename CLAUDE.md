@@ -138,6 +138,45 @@ position from weather.conf first. The port lints application files with
 php -l (--no-lint for qemu tests); it caught nothing before because a
 repeated #[AllowDynamicProperties] is a compile error, not a parse error.
 
+## README (2026-11-06)
+
+The user edits the README's wording; keep their decisions:
+- Title: "... for the NEP BDG-256 Gateway (ZLG M6G2C-256LI)". Two summary
+  paragraphs open it (old ZLG system -> Debian 13 / Linux 6.12 / U-Boot
+  2024.01; lighttpd + PHP 8.4, CI3, jQuery 3, Highcharts 13; misetup taken
+  off the network; weather and map restored), then "## The build kit".
+- Tested state is described as done: the production unit needs no
+  re-checking; section 4's factory-dump steps are only for other units or
+  carriers; section 9 lists what was tested and what wasn't (MI200E, ENET1,
+  CAN, UART7/8, ADC, WPA3-only Wi-Fi). Don't reintroduce "confirm/verify
+  before relying on it" wording for this unit.
+- Section 3: the boot switch is under the corner of the LCD, NVRAM -> SD;
+  the SD slot is under the case on the LCD side, contacts facing the board,
+  the case needs a small cutout; use a high-endurance microSD card. The
+  fallback via ZLG's NAND U-Boot (and the /boot format note) was removed on
+  request.
+- The serial console is output only (TX + GND); log in over SSH via
+  Ethernet or Wi-Fi (5a). After section 7's setup, zlg-hmi owns tty1.
+- 5a Wi-Fi: the dongle goes in the USB-A port on the bottom of the Gateway.
+- Sections run in order: 5a Wi-Fi, 5b Display, 5c MI200E, 6, 7 NEP software
+  (7b web interface), 8 Layout, 9 What has been tested. Script comments and
+  zlg-chroot's error message say "README section 7" / "7b" (the board's
+  installed copies still say 9 until the next install).
+- 7b: with the same NEP version as the production unit ("Old"), run
+  install-web.sh --switch right away; compare on port 8080 only for a
+  different NEP version.
+
+Declined by the user: baking a /srv/zlg snapshot into the image and
+building without NAND (M6G2C_ENABLE_NAND=0). zlg-import from the NAND stays.
+
+## Repository and access
+
+- GitHub: chill633/nep-modern-gateway (private; renamed from chill633/claude,
+  which redirects), default branch claude/m6g2c-trixie-kit. Local checkout:
+  ~/Working/nep-modern-gateway. gh is installed and logged in.
+- The board password isn't stored anywhere; ask the user for it (they plan
+  to change it) or have them run board-side commands.
+
 ## Working with the user
 
 - Hardware access is only through the user: they run commands on the board
