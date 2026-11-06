@@ -1,0 +1,6 @@
+[Unit]
+Description=Update the clock offset for ZLG's programs (daylight saving)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/zlg-chroot offset

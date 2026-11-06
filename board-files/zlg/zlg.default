@@ -1,0 +1,13 @@
+# Settings for ZLG's gateway software in /srv/zlg (zlg-chroot, zlg-*.service)
+
+# ZLG's programs see the clock shifted to local time (zlg-time.so), as on
+# ZLG's system. The offset follows the board's time zone, including daylight
+# saving (sudo timedatectl set-timezone America/New_York). To force a fixed
+# offset instead, in seconds east of UTC:
+#ZLG_UTC_OFFSET=-18000
+
+# 1: keep everything local. Removes the cron jobs that upload to NEP's cloud
+# (my_nsync -> php remote, nepviewer.com). Data collection, the local web
+# pages (fed by gdata.sh -> lsync -> php proxy, all local) and the reports
+# are unaffected.
+ZLG_LOCAL_ONLY=0

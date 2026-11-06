@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart ZLG's gateway software when it asks to reboot
+
+[Path]
+# written by the reboot stand-in inside /srv/zlg (ZLG's day_clean.sh at 01:00)
+PathExists=/run/zlg/restart
+
+[Install]
+WantedBy=zlg.target

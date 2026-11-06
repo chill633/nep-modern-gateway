@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart ZLG's gateway software (its "reboot")
+
+[Service]
+Type=oneshot
+ExecStart=/bin/rm -f /run/zlg/restart
+ExecStart=/bin/systemctl restart zlg.target

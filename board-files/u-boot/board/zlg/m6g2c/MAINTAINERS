@@ -1,0 +1,7 @@
+ZLG M6G2C BOARD
+S:	Maintained
+F:	board/zlg/m6g2c/
+F:	include/configs/zlg_m6g2c.h
+F:	configs/zlg_m6g2c_defconfig
+F:	arch/arm/dts/imx6ul-zlg-m6g2c.dts
+F:	arch/arm/dts/imx6ul-zlg-m6g2c-u-boot.dtsi

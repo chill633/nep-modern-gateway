@@ -1,0 +1,13 @@
+[Unit]
+Description=M6G2C first boot: grow root filesystem, create SSH host keys
+ConditionPathExists=/etc/m6g2c-firstboot
+After=systemd-remount-fs.service local-fs.target
+Before=ssh.service systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/m6g2c-firstboot
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+if TARGET_ZLG_M6G2C
+
+config SYS_BOARD
+	default "m6g2c"
+
+config SYS_VENDOR
+	default "zlg"
+
+config SYS_CONFIG_NAME
+	default "zlg_m6g2c"
+
+endif

@@ -1,0 +1,23 @@
+[Unit]
+Description=ZLG gateway: power control (gateway-pctrl)
+BindsTo=zlg-chroot.service
+After=zlg-chroot.service
+PartOf=zlg.target
+
+[Service]
+# skipped (not failed) when this version of ZLG's software doesn't have it;
+# checked inside /srv/zlg, where its links point
+ExecCondition=/usr/local/sbin/zlg-chroot run / /bin/sh -c "test -e /root/Gateway/gateway-pctrl"
+ExecStart=/usr/local/sbin/zlg-chroot run /root/Gateway ./gateway-pctrl
+# With check_interval=0 in plc.conf (ZLG's boot script sets it for this
+# configuration) it applies the power-limit settings once and exits 0;
+# otherwise it keeps running. Only restart it if it fails.
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+# NEP's programs log to files or /dev/null themselves
+StandardOutput=null
+
+
+[Install]
+WantedBy=zlg.target

@@ -1,0 +1,27 @@
+[Unit]
+Description=ZLG gateway: touch-screen display (gateway-hmi, Qt 4)
+BindsTo=zlg-chroot.service
+After=zlg-chroot.service
+PartOf=zlg.target
+# it takes over tty1 (display and keyboard)
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+# skipped (not failed) when this version of ZLG's software doesn't have it;
+# checked inside /srv/zlg, where its links point
+ExecCondition=/usr/local/sbin/zlg-chroot run / /bin/sh -c "test -e /root/Gateway/gateway-hmi"
+# ZLG's /etc/profile names the touch screen /dev/input/event1; here it is
+# found by its path, which doesn't depend on probe order.
+ExecStart=/usr/local/sbin/zlg-chroot run /root /bin/sh -c '\
+	. /etc/profile; \
+	ts=$$(ls /dev/input/by-path/*touchscreen*-event* 2>/dev/null | head -n 1); \
+	[ -n "$$ts" ] && export TSLIB_TSDEVICE=$$ts QWS_MOUSE_PROTO="Tslib:$$ts MouseMan:/dev/input/mice"; \
+	rm -rf /tmp/qtembedded-*; \
+	exec /root/Gateway/gateway-hmi -qws'
+Restart=always
+RestartSec=10
+StandardOutput=null
+
+[Install]
+WantedBy=zlg.target

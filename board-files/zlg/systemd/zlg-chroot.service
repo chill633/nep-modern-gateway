@@ -1,0 +1,14 @@
+[Unit]
+Description=ZLG gateway system in /srv/zlg (mounts and start-up)
+After=network.target local-fs.target
+Wants=network.target
+ConditionPathExists=/srv/zlg/root/Gateway/gateway-plc
+PartOf=zlg.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# ginit.sh records the board's IP address: give the network a moment
+ExecStartPre=-/usr/lib/systemd/systemd-networkd-wait-online --any --timeout=30
+ExecStart=/usr/local/sbin/zlg-chroot start
+ExecStop=/usr/local/sbin/zlg-chroot stop

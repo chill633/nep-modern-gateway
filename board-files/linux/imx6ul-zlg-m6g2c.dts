@@ -1,0 +1,857 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * ZLG M6G2C-256LI core module (NXP i.MX6UL MCIMX6G2CVM05, 528 MHz)
+ *   256 MiB DDR3L  ISSI IS43TR16128DL-125KBLI
+ *   256 MiB NAND   Spansion S34ML02G2 (marking ML02G200BH100)
+ *
+ * What is certain is marked as such. Everything marked VERIFY is the usual
+ * i.MX6UL wiring but depends on ZLG's module/carrier design: compare it with
+ * ZLG's imx6g2c-256m.dts (from the ZLG CD / FAE) or with the device tree of
+ * the factory Linux (tools/collect-zlg-hwinfo.sh + tools/decode-pinctrl.py).
+ *
+ * CONFIRMED from the factory boot log of an EPC-M6G2C (ZLG U-Boot 2015.04,
+ * Linux 4.1.15, "ZLG EPC-A6G2C Board"):
+ *   - console UART1 (ttymxc0), SD card on uSDHC1 (2190000), with CD and WP
+ *   - one Ethernet port: ENET2 (20b4000), TI/NS DP83848C PHY at MDIO addr 5
+ *   - RTC: NXP PCF85063 at 0x51 on a GPIO (bit-banged) I2C bus,
+ *     SDA = gpio 136 = GPIO5_IO08, SCL = gpio 135 = GPIO5_IO07
+ *   - NAND: S34ML02G2, flash-based BBT, 4 partitions (see gpmi below)
+ *   - both USB controllers as hosts
+ *   - external GPIO watchdog fed by a ZLG driver at arch_initcall
+ * and from ZLG's EPC-M6G2C device tree as published in two CSDN posts
+ * (an older ZLG release: its NAND layout differs, so the log wins where they
+ * disagree). It agrees with the log on the I2C/RTC wiring and adds:
+ *   - watchdog: CAT82x supervisor, WDI on GPIO5_IO00 (pad 0x17059),
+ *     hw_margin_ms 700
+ *   - LEDs on GPIO4_IO16 and GPIO4_IO14, active low (see leds node)
+ *   - UART7 on LCD_DATA16/17, UART8 on LCD_DATA20/21
+ *   - ENET1 PHY at MDIO address 1 (ENET2's is 5), both on ENET2's MDIO bus
+ *   - USB OTG1 dual-role with ID on GPIO1_IO00, OTG2 host
+ *
+ * Feature switches: set to 1 to enable.
+ */
+
+/* ENET2: the EPC-M6G2C's Ethernet port (DP83848C at MDIO address 5). */
+#ifndef M6G2C_ENABLE_FEC2
+#define M6G2C_ENABLE_FEC2	1
+#endif
+
+/* ENET1: PHY at address 1 in ZLG's device tree, but not probed on the unit
+ * whose boot log this port is based on. Enable if your EPC-M6G2C has a
+ * second Ethernet port. */
+#ifndef M6G2C_ENABLE_FEC1
+#define M6G2C_ENABLE_FEC1	0
+#endif
+
+/* PCF85063 RTC on the GPIO I2C bus (SNVS_TAMPER7/8 pads) */
+#ifndef M6G2C_ENABLE_RTC
+#define M6G2C_ENABLE_RTC	1
+#endif
+
+/*
+ * On-module NAND, with ZLG's factory partitions, all read-only (see &gpmi).
+ * Verified on an EPC-M6G2C (with Linux 6.1): Linux finds ZLG's bad-block table and
+ * writes nothing; with fsl,use-minimum-ecc it reads ZLG's data correctly.
+ */
+#ifndef M6G2C_ENABLE_NAND
+#define M6G2C_ENABLE_NAND	1
+#endif
+
+/*
+ * FlexCAN1 on UART3_RTS/CTS, FlexCAN2 on UART2_RTS/CTS (confirmed in ZLG's
+ * device tree). Off in the factory system; CAN2's pads double as UART2
+ * RTS/CTS for ZLG's Bluetooth option.
+ */
+#ifndef M6G2C_ENABLE_CAN
+#define M6G2C_ENABLE_CAN	0
+#endif
+
+/* UART7 (LCD_DATA16/17) and UART8 (LCD_DATA20/21): ttymxc6 / ttymxc7 */
+#ifndef M6G2C_ENABLE_UART78
+#define M6G2C_ENABLE_UART78	1
+#endif
+
+/* UART2-5 (ttymxc1-4) on their own pads, as in ZLG's factory system */
+#ifndef M6G2C_ENABLE_UART2345
+#define M6G2C_ENABLE_UART2345	1
+#endif
+
+/*
+ * NEP's MI200E power-line modems on ECSPI1: three, one per mains phase, each
+ * with its own chip-select GPIO, paced by the EPIT2 timer. /dev/mi200e for
+ * NEP's gateway-plc (driver board-files/linux/drivers/nep-mi200e.c, module
+ * plc_mi200e_o). It drives ECSPI1 itself, so it excludes M6G2C_ENABLE_SPI.
+ *
+ * Off by default: single-phase EPC-M6G2C units (engineer.cfg
+ * "plc_module=1") talk to a serial PLC module on UART2 (/dev/ttymxc1,
+ * 9600 8N1) and don't use the MI200E. Turn it on only for units with
+ * "comm_device=0" and "plc_module=0".
+ */
+#ifndef M6G2C_ENABLE_MI200E
+#define M6G2C_ENABLE_MI200E	0
+#endif
+
+/*
+ * ECSPI1 as a plain spidev (/dev/spidev0.0, chip select GPIO4_IO26). Turned
+ * off automatically when M6G2C_ENABLE_MI200E=1.
+ */
+#ifndef M6G2C_ENABLE_SPI
+#define M6G2C_ENABLE_SPI	1
+#endif
+
+/* both use ECSPI1: the MI200E wins (a space, not a tab: 02-kernel.sh's sed) */
+#if M6G2C_ENABLE_SPI && M6G2C_ENABLE_MI200E
+#undef M6G2C_ENABLE_SPI
+#define M6G2C_ENABLE_SPI 0
+#endif
+
+/* ADC1 inputs 8 and 9 (GPIO1_IO08/09 pads) */
+#ifndef M6G2C_ENABLE_ADC
+#define M6G2C_ENABLE_ADC	1
+#endif
+
+/*
+ * Pins ZLG's device tree sets up as plain GPIOs (its "hog" group), likely
+ * the box's digital I/O: GPIO3_IO04, GPIO5_IO01-04, GPIO4_IO17-24.
+ * GPIO4_IO17-24 share pads with UART6, the second SD controller (uSDHC2)
+ * and the camera interface, which stay off.
+ */
+#ifndef M6G2C_ENABLE_GPIO_HOG
+#define M6G2C_ENABLE_GPIO_HOG	1
+#endif
+
+/*
+ * Display: Tianma TM043NBH02, 4.3" 480x272, on LCDIF with 16 data lines
+ * (RGB565), PWM5 backlight. Timings and polarities from ZLG's device tree.
+ */
+#ifndef M6G2C_ENABLE_DISPLAY
+#define M6G2C_ENABLE_DISPLAY	1
+#endif
+
+/* The panel's 4-wire resistive touch, on the i.MX6UL touch controller */
+#ifndef M6G2C_ENABLE_TOUCH
+#define M6G2C_ENABLE_TOUCH	1
+#endif
+
+/* Beeper on PWM6 (LCD_DATA19); ZLG drives it at 2.5 kHz */
+#ifndef M6G2C_ENABLE_BEEPER
+#define M6G2C_ENABLE_BEEPER	1
+#endif
+
+/* Run/error LEDs on the EPC-M6G2C front panel */
+#ifndef M6G2C_ENABLE_LEDS
+#define M6G2C_ENABLE_LEDS	1
+#endif
+
+/* USB: OTG1 dual-role (ID pin), OTG2 host, as in ZLG's device tree */
+#ifndef M6G2C_ENABLE_USB
+#define M6G2C_ENABLE_USB	1
+#endif
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include "imx6ul.dtsi"
+
+/ {
+	model = "ZLG M6G2C-256LI (i.MX6UL)";
+	compatible = "zlg,m6g2c", "fsl,imx6ul";
+
+	chosen {
+		stdout-path = &uart1;
+	};
+
+#if M6G2C_ENABLE_RTC
+	aliases {
+		rtc0 = &rtc_ext;	/* battery-backed, used by hwclock/systemd */
+		rtc1 = &snvs_rtc;
+	};
+
+	i2c_gpio: i2c-gpio {
+		compatible = "i2c-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_i2c_gpio>;
+		sda-gpios = <&gpio5 8 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpio5 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <5>;	/* ~100 kHz */
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		rtc_ext: rtc@51 {
+			compatible = "nxp,pcf85063";
+			reg = <0x51>;
+		};
+	};
+#endif
+
+	/* Certain: one x16 DDR3L device, 2 Gbit = 256 MiB on CS0. */
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 0x10000000>;
+	};
+
+	reg_3v3: regulator-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "3V3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+
+#if M6G2C_ENABLE_DISPLAY
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm5 0 5000000 0>;		/* 200 Hz */
+		brightness-levels = <0 4 8 16 32 64 128 255>;
+		default-brightness-level = <7>;
+		power-supply = <&reg_3v3>;
+	};
+
+	panel {
+		compatible = "tianma,tm043nbh02", "panel-dpi";
+		data-mapping = "rgb565";	/* LCD_DATA00-15 only */
+		width-mm = <95>;
+		height-mm = <54>;
+		power-supply = <&reg_3v3>;
+		backlight = <&backlight>;
+
+		/* ZLG's values: 9 MHz, 480x272 */
+		panel-timing {
+			clock-frequency = <9000000>;
+			hactive = <480>;
+			vactive = <272>;
+			hfront-porch = <8>;
+			hback-porch = <43>;
+			hsync-len = <4>;
+			vfront-porch = <8>;
+			vback-porch = <8>;
+			vsync-len = <6>;
+			hsync-active = <0>;
+			vsync-active = <0>;
+			de-active = <1>;
+			pixelclk-active = <0>;
+		};
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&lcdif_out>;
+			};
+		};
+	};
+#endif
+
+#if M6G2C_ENABLE_BEEPER
+	beeper {
+		compatible = "pwm-beeper";
+		pwms = <&pwm6 0 400000 0>;	/* 2.5 kHz, as ZLG */
+		beeper-hz = <2500>;		/* console bell (\a) pitch */
+	};
+#endif
+
+#if M6G2C_ENABLE_LEDS
+	/*
+	 * ZLG's own file is inconsistent: its gpio-leds node says run=IO16 and
+	 * err=IO14, but its pin comments say the opposite. This follows the
+	 * gpio-leds node; if the wrong LED blinks, swap the two gpios lines.
+	 */
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_leds>;
+
+		led-run {
+			label = "led-run";
+			gpios = <&gpio4 16 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "heartbeat";
+		};
+
+		led-err {
+			label = "led-err";
+			gpios = <&gpio4 14 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+	};
+#endif
+
+#ifdef M6G2C_WDT_PAD
+	/*
+	 * External hardware watchdog (CAT82x on the EPC-M6G2C, ~1.6 s). U-Boot feeds it
+	 * up to the jump into Linux; this driver (built in, arch_initcall)
+	 * takes over and keeps feeding it until userspace opens it.
+	 * scripts/02-kernel.sh defines the M6G2C_WDT_* macros from WDT_GPIO.
+	 */
+	watchdog-gpio {
+		compatible = "linux,wdt-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wdt>;
+		gpios = <M6G2C_WDT_GPIO_REF M6G2C_WDT_PIN GPIO_ACTIVE_HIGH>;
+		hw_algo = "toggle";
+		hw_margin_ms = <M6G2C_WDT_MARGIN_MS>;
+		always-running;
+	};
+#endif
+
+#if M6G2C_ENABLE_MI200E
+	/*
+	 * As in ZLG's device tree, plus what NEP's driver hard-coded: the GPIO
+	 * numbers and the EPIT2 timer. GPIO levels are raw; flags are ignored.
+	 */
+	plc: mi200e {
+		compatible = "nep,mi200e";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_ecspi1 &pinctrl_ecspi1_cs &pinctrl_mi200e>;
+		reg = <0x02008000 0x4000>,	/* ECSPI1 */
+		      <0x020d4000 0x4000>;	/* EPIT2 */
+		reg-names = "ecspi", "epit";
+		/* outside /soc, so name the parent the SoC's peripherals use */
+		interrupt-parent = <&gpc>;
+		interrupts = <GIC_SPI 57 IRQ_TYPE_LEVEL_HIGH>;	/* EPIT2 */
+		clocks = <&clks IMX6UL_CLK_ECSPI1>, <&clks IMX6UL_CLK_ECSPI1>,
+			 <&clks IMX6UL_CLK_EPIT2>;
+		clock-names = "ipg", "per", "epit";
+		power-gpios = <&gpio4 18 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio4 19 GPIO_ACTIVE_HIGH>;
+		phase-gpios = <&gpio4 20 GPIO_ACTIVE_HIGH>,	/* chip selects, */
+			      <&gpio4 21 GPIO_ACTIVE_HIGH>,	/* phases A, B, C */
+			      <&gpio4 22 GPIO_ACTIVE_HIGH>;
+		led-gpios = <&gpio4 24 GPIO_ACTIVE_HIGH>;
+		ss-gpios = <&gpio4 26 GPIO_ACTIVE_HIGH>;	/* ECSPI1_SS0 pad */
+	};
+#endif
+};
+
+#ifdef M6G2C_WDT_PAD
+&iomuxc {
+	pinctrl_wdt: wdtgrp {
+		fsl,pins = <
+			M6G2C_WDT_PAD		0x17059	/* as in ZLG's device tree */
+		>;
+	};
+};
+#endif
+
+/* Certain for 528 MHz MCIMX6G2CVM05 parts: no 696 MHz operating point. */
+&cpu0 {
+	clock-frequency = <528000000>;
+};
+
+/* Debug console: UART1, 115200 8N1 (the i.MX6UL ROM's serial port). */
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart1>;
+	status = "okay";
+};
+
+/* SD card on uSDHC1 (the NAND occupies uSDHC2's usual pads). */
+&usdhc1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usdhc1>;
+	bus-width = <4>;
+	broken-cd;		/* card-detect GPIO is carrier specific: poll */
+	no-1-8-v;
+	keep-power-in-suspend;
+	vmmc-supply = <&reg_3v3>;
+	status = "okay";
+};
+
+#if M6G2C_ENABLE_NAND
+/*
+ * S34ML02G2: 2048+128 byte pages, 64 pages/block, 2048 blocks.
+ *
+ * ECC: ZLG's factory software wrote the flash with BCH strength 4 (the chip's
+ * minimum, 4 bits per 512 bytes). That's found with tools/gpmi-raw-analyze.py
+ * on a raw page dump. Without fsl,use-minimum-ecc, Linux (6.1, 6.12) uses its
+ * "legacy" layout, the strongest that fits the OOB (18 here), and every read
+ * of ZLG's data fails with -EBADMSG (ECC error -74).
+ *
+ * Partitions as in the factory system. All read-only, so enabling NAND
+ * cannot damage ZLG's software; drop "read-only" from the ones you take over.
+ * The factory root filesystem is UBIFS on "rootfs" (ubi.mtd=3).
+ */
+&gpmi {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_gpmi_nand>;
+	nand-on-flash-bbt;
+	fsl,use-minimum-ecc;	/* match ZLG: BCH strength 4 */
+	status = "okay";
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		partition@0 {
+			label = "u-boot";
+			reg = <0x0000000 0x0400000>;
+			read-only;
+		};
+
+		partition@400000 {
+			label = "dtb";
+			reg = <0x0400000 0x0100000>;
+			read-only;
+		};
+
+		partition@500000 {
+			label = "kernel-0";
+			reg = <0x0500000 0x0800000>;
+			read-only;
+		};
+
+		partition@d00000 {
+			label = "rootfs";
+			reg = <0x0d00000 0xf300000>;
+			read-only;
+		};
+	};
+};
+#endif
+
+#if M6G2C_ENABLE_FEC1
+&fec1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_enet1>;
+	phy-mode = "rmii";
+	phy-handle = <&ethphy0>;
+	phy-supply = <&reg_3v3>;
+	status = "okay";
+};
+#endif
+
+#if M6G2C_ENABLE_FEC2 || M6G2C_ENABLE_FEC1
+/* The MDIO bus is driven by ENET2 (as in the factory system). */
+&fec2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_enet2>;
+	phy-mode = "rmii";
+	phy-handle = <&ethphy1>;
+	phy-supply = <&reg_3v3>;
+	status = "okay";	/* also needed by ENET1: it owns the MDIO bus */
+
+	mdio {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+#if M6G2C_ENABLE_FEC1
+		/* ZLG device tree: ENET1's PHY at address 1 */
+		ethphy0: ethernet-phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <1>;
+		};
+#endif
+
+		/* CONFIRMED: DP83848C (ID 0x20005c90) at address 5 */
+		ethphy1: ethernet-phy@5 {
+			compatible = "ethernet-phy-id2000.5c90",
+				     "ethernet-phy-ieee802.3-c22";
+			reg = <5>;
+		};
+	};
+};
+#endif
+
+#if M6G2C_ENABLE_CAN
+&can1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_flexcan1>;
+	status = "okay";
+};
+
+&can2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_flexcan2>;
+	status = "okay";
+};
+#endif
+
+#if M6G2C_ENABLE_USB
+&usbotg1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usb_otg1>;
+	dr_mode = "otg";		/* host with an OTG/host cable, device to a PC */
+	disable-over-current;
+	status = "okay";
+};
+
+&usbotg2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usb_otg2>;
+	dr_mode = "host";
+	disable-over-current;
+	status = "okay";
+};
+
+&usbphy1 {
+	fsl,tx-d-cal = <106>;	/* ZLG vendor kernel: tx-d-cal = <0x5> */
+};
+
+&usbphy2 {
+	fsl,tx-d-cal = <106>;
+};
+#endif
+
+#if M6G2C_ENABLE_UART2345
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart2>;
+	status = "okay";
+};
+
+&uart3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart3>;
+	status = "okay";
+};
+
+&uart4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4>;
+	status = "okay";
+};
+
+&uart5 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart5>;
+	status = "okay";
+};
+#endif
+
+#if M6G2C_ENABLE_SPI
+&ecspi1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ecspi1 &pinctrl_ecspi1_cs>;
+	cs-gpios = <&gpio4 26 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	/* ZLG: "rohm,dh2228fv" is just a spidev-compatible placeholder */
+	spidev@0 {
+		compatible = "rohm,dh2228fv";
+		reg = <0>;
+		spi-max-frequency = <2000000>;
+	};
+};
+#endif
+
+#if M6G2C_ENABLE_ADC
+&adc1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_adc1>;
+	num-channels = <10>;		/* IN8 = GPIO1_IO08, IN9 = GPIO1_IO09 */
+	vref-supply = <&reg_3v3>;
+	status = "okay";
+};
+#endif
+
+#if M6G2C_ENABLE_DISPLAY
+&lcdif {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_lcdif_dat &pinctrl_lcdif_ctrl>;
+	status = "okay";
+
+	port {
+		lcdif_out: endpoint {
+			remote-endpoint = <&panel_in>;
+		};
+	};
+};
+
+&pwm5 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_pwm5>;
+	status = "okay";
+};
+#endif
+
+#if M6G2C_ENABLE_BEEPER
+&pwm6 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_pwm6>;
+	status = "okay";
+};
+#endif
+
+#if M6G2C_ENABLE_TOUCH
+&tsc {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_tsc>;
+	xnur-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
+	measure-delay-time = <0xffff>;
+	pre-charge-time = <0xfff>;
+	status = "okay";
+};
+#endif
+
+#if M6G2C_ENABLE_UART78
+&uart7 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart7>;
+	status = "okay";
+};
+
+&uart8 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart8>;
+	status = "okay";
+};
+#endif
+
+&iomuxc {
+#if M6G2C_ENABLE_GPIO_HOG
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_hog>;
+
+	pinctrl_hog: hoggrp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_RESET__GPIO3_IO04		0x17059
+			MX6UL_PAD_SNVS_TAMPER1__GPIO5_IO01	0x17059
+			MX6UL_PAD_SNVS_TAMPER2__GPIO5_IO02	0x17059
+			MX6UL_PAD_SNVS_TAMPER3__GPIO5_IO03	0x17059
+			MX6UL_PAD_SNVS_TAMPER4__GPIO5_IO04	0x17059
+			MX6UL_PAD_CSI_MCLK__GPIO4_IO17		0x17059
+#if !M6G2C_ENABLE_MI200E	/* else in pinctrl_mi200e */
+			MX6UL_PAD_CSI_PIXCLK__GPIO4_IO18	0x17059
+			MX6UL_PAD_CSI_VSYNC__GPIO4_IO19		0x17059
+			MX6UL_PAD_CSI_HSYNC__GPIO4_IO20		0x17059
+			MX6UL_PAD_CSI_DATA00__GPIO4_IO21	0x17059
+			MX6UL_PAD_CSI_DATA01__GPIO4_IO22	0x17059
+#endif
+			MX6UL_PAD_CSI_DATA02__GPIO4_IO23	0x17059
+#if !M6G2C_ENABLE_MI200E
+			MX6UL_PAD_CSI_DATA03__GPIO4_IO24	0x17059
+#endif
+		>;
+	};
+#endif
+
+	/* MI200E: power, reset, phase A/B/C chip selects, LED */
+	pinctrl_mi200e: mi200egrp {
+		fsl,pins = <
+			MX6UL_PAD_CSI_PIXCLK__GPIO4_IO18	0x17059
+			MX6UL_PAD_CSI_VSYNC__GPIO4_IO19		0x17059
+			MX6UL_PAD_CSI_HSYNC__GPIO4_IO20		0x17059
+			MX6UL_PAD_CSI_DATA00__GPIO4_IO21	0x17059
+			MX6UL_PAD_CSI_DATA01__GPIO4_IO22	0x17059
+			MX6UL_PAD_CSI_DATA03__GPIO4_IO24	0x17059
+		>;
+	};
+
+	pinctrl_uart1: uart1grp {
+		fsl,pins = <
+			MX6UL_PAD_UART1_TX_DATA__UART1_DCE_TX	0x1b0b1
+			MX6UL_PAD_UART1_RX_DATA__UART1_DCE_RX	0x1b0b1
+		>;
+	};
+
+	pinctrl_usdhc1: usdhc1grp {
+		fsl,pins = <
+			MX6UL_PAD_SD1_CMD__USDHC1_CMD		0x17059
+			MX6UL_PAD_SD1_CLK__USDHC1_CLK		0x10059
+			MX6UL_PAD_SD1_DATA0__USDHC1_DATA0	0x17059
+			MX6UL_PAD_SD1_DATA1__USDHC1_DATA1	0x17059
+			MX6UL_PAD_SD1_DATA2__USDHC1_DATA2	0x17059
+			MX6UL_PAD_SD1_DATA3__USDHC1_DATA3	0x17059
+		>;
+	};
+
+	pinctrl_lcdif_dat: lcdifdatgrp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_DATA00__LCDIF_DATA00	0x79
+			MX6UL_PAD_LCD_DATA01__LCDIF_DATA01	0x79
+			MX6UL_PAD_LCD_DATA02__LCDIF_DATA02	0x79
+			MX6UL_PAD_LCD_DATA03__LCDIF_DATA03	0x79
+			MX6UL_PAD_LCD_DATA04__LCDIF_DATA04	0x79
+			MX6UL_PAD_LCD_DATA05__LCDIF_DATA05	0x79
+			MX6UL_PAD_LCD_DATA06__LCDIF_DATA06	0x79
+			MX6UL_PAD_LCD_DATA07__LCDIF_DATA07	0x79
+			MX6UL_PAD_LCD_DATA08__LCDIF_DATA08	0x79
+			MX6UL_PAD_LCD_DATA09__LCDIF_DATA09	0x79
+			MX6UL_PAD_LCD_DATA10__LCDIF_DATA10	0x79
+			MX6UL_PAD_LCD_DATA11__LCDIF_DATA11	0x79
+			MX6UL_PAD_LCD_DATA12__LCDIF_DATA12	0x79
+			MX6UL_PAD_LCD_DATA13__LCDIF_DATA13	0x79
+			MX6UL_PAD_LCD_DATA14__LCDIF_DATA14	0x79
+			MX6UL_PAD_LCD_DATA15__LCDIF_DATA15	0x79
+		>;
+	};
+
+	pinctrl_lcdif_ctrl: lcdifctrlgrp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_CLK__LCDIF_CLK		0x79
+			MX6UL_PAD_LCD_ENABLE__LCDIF_ENABLE	0x79
+			MX6UL_PAD_LCD_HSYNC__LCDIF_HSYNC	0x79
+			MX6UL_PAD_LCD_VSYNC__LCDIF_VSYNC	0x79
+		>;
+	};
+
+	pinctrl_pwm5: pwm5grp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_DATA18__PWM5_OUT		0x110b0
+		>;
+	};
+
+	pinctrl_pwm6: pwm6grp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_DATA19__PWM6_OUT		0x110b0
+		>;
+	};
+
+	pinctrl_tsc: tscgrp {
+		fsl,pins = <
+			MX6UL_PAD_GPIO1_IO01__GPIO1_IO01	0xb0
+			MX6UL_PAD_GPIO1_IO02__GPIO1_IO02	0xb0
+			MX6UL_PAD_GPIO1_IO03__GPIO1_IO03	0xb0
+			MX6UL_PAD_GPIO1_IO04__GPIO1_IO04	0xb0
+		>;
+	};
+
+	pinctrl_uart2: uart2grp {
+		fsl,pins = <
+			MX6UL_PAD_UART2_TX_DATA__UART2_DCE_TX	0x1b0b1
+			MX6UL_PAD_UART2_RX_DATA__UART2_DCE_RX	0x1b0b1
+		>;
+	};
+
+	pinctrl_uart3: uart3grp {
+		fsl,pins = <
+			MX6UL_PAD_UART3_TX_DATA__UART3_DCE_TX	0x1b0b1
+			MX6UL_PAD_UART3_RX_DATA__UART3_DCE_RX	0x1b0b1
+		>;
+	};
+
+	pinctrl_uart4: uart4grp {
+		fsl,pins = <
+			MX6UL_PAD_UART4_TX_DATA__UART4_DCE_TX	0x1b0b1
+			MX6UL_PAD_UART4_RX_DATA__UART4_DCE_RX	0x1b0b1
+		>;
+	};
+
+	pinctrl_uart5: uart5grp {
+		fsl,pins = <
+			MX6UL_PAD_UART5_TX_DATA__UART5_DCE_TX	0x1b0b1
+			MX6UL_PAD_UART5_RX_DATA__UART5_DCE_RX	0x1b0b1
+		>;
+	};
+
+	pinctrl_ecspi1: ecspi1grp {
+		fsl,pins = <
+			MX6UL_PAD_CSI_DATA04__ECSPI1_SCLK	0x100b1
+			MX6UL_PAD_CSI_DATA06__ECSPI1_MOSI	0x100b1
+			MX6UL_PAD_CSI_DATA07__ECSPI1_MISO	0x100b1
+		>;
+	};
+
+	pinctrl_ecspi1_cs: ecspi1csgrp {
+		fsl,pins = <
+			MX6UL_PAD_CSI_DATA05__GPIO4_IO26	0x17059
+		>;
+	};
+
+	pinctrl_adc1: adc1grp {
+		fsl,pins = <
+			MX6UL_PAD_GPIO1_IO08__GPIO1_IO08	0xb0
+			MX6UL_PAD_GPIO1_IO09__GPIO1_IO09	0xb0
+		>;
+	};
+
+	pinctrl_uart7: uart7grp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_DATA16__UART7_DCE_TX	0x1b0b1
+			MX6UL_PAD_LCD_DATA17__UART7_DCE_RX	0x1b0b1
+		>;
+	};
+
+	pinctrl_uart8: uart8grp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_DATA20__UART8_DCE_TX	0x1b0b1
+			MX6UL_PAD_LCD_DATA21__UART8_DCE_RX	0x1b0b1
+		>;
+	};
+
+	pinctrl_usb_otg1: usbotg1grp {
+		fsl,pins = <
+			MX6UL_PAD_GPIO1_IO00__ANATOP_OTG1_ID	0x17059
+		>;
+	};
+
+	pinctrl_usb_otg2: usbotg2grp {
+		fsl,pins = <
+			MX6UL_PAD_GPIO1_IO05__ANATOP_OTG2_ID	0x17059
+		>;
+	};
+
+	pinctrl_leds: ledsgrp {
+		fsl,pins = <
+			MX6UL_PAD_NAND_DQS__GPIO4_IO16		0x17059
+			MX6UL_PAD_NAND_CE1_B__GPIO4_IO14	0x17059
+		>;
+	};
+
+	pinctrl_i2c_gpio: i2cgpiogrp {
+		fsl,pins = <
+			MX6UL_PAD_SNVS_TAMPER8__GPIO5_IO08	0x4001b8b0	/* SDA */
+			MX6UL_PAD_SNVS_TAMPER7__GPIO5_IO07	0x4001b8b0	/* SCL */
+		>;
+	};
+
+	pinctrl_gpmi_nand: gpminandgrp {
+		fsl,pins = <
+			MX6UL_PAD_NAND_CLE__RAWNAND_CLE		0x0b0b1
+			MX6UL_PAD_NAND_ALE__RAWNAND_ALE		0x0b0b1
+			MX6UL_PAD_NAND_WP_B__RAWNAND_WP_B	0x0b0b1
+			MX6UL_PAD_NAND_READY_B__RAWNAND_READY_B	0x0b000
+			MX6UL_PAD_NAND_CE0_B__RAWNAND_CE0_B	0x0b0b1
+			MX6UL_PAD_NAND_RE_B__RAWNAND_RE_B	0x0b0b1
+			MX6UL_PAD_NAND_WE_B__RAWNAND_WE_B	0x0b0b1
+			MX6UL_PAD_NAND_DATA00__RAWNAND_DATA00	0x0b0b1
+			MX6UL_PAD_NAND_DATA01__RAWNAND_DATA01	0x0b0b1
+			MX6UL_PAD_NAND_DATA02__RAWNAND_DATA02	0x0b0b1
+			MX6UL_PAD_NAND_DATA03__RAWNAND_DATA03	0x0b0b1
+			MX6UL_PAD_NAND_DATA04__RAWNAND_DATA04	0x0b0b1
+			MX6UL_PAD_NAND_DATA05__RAWNAND_DATA05	0x0b0b1
+			MX6UL_PAD_NAND_DATA06__RAWNAND_DATA06	0x0b0b1
+			MX6UL_PAD_NAND_DATA07__RAWNAND_DATA07	0x0b0b1
+		>;
+	};
+
+	pinctrl_enet1: enet1grp {
+		fsl,pins = <
+			MX6UL_PAD_ENET1_RX_EN__ENET1_RX_EN	0x1b0b0
+			MX6UL_PAD_ENET1_RX_ER__ENET1_RX_ER	0x1b0b0
+			MX6UL_PAD_ENET1_RX_DATA0__ENET1_RDATA00	0x1b0b0
+			MX6UL_PAD_ENET1_RX_DATA1__ENET1_RDATA01	0x1b0b0
+			MX6UL_PAD_ENET1_TX_EN__ENET1_TX_EN	0x1b0b0
+			MX6UL_PAD_ENET1_TX_DATA0__ENET1_TDATA00	0x1b0b0
+			MX6UL_PAD_ENET1_TX_DATA1__ENET1_TDATA01	0x1b0b0
+			MX6UL_PAD_ENET1_TX_CLK__ENET1_REF_CLK1	0x4001b031
+		>;
+	};
+
+	pinctrl_enet2: enet2grp {
+		fsl,pins = <
+			MX6UL_PAD_GPIO1_IO07__ENET2_MDC		0x1b0b0
+			MX6UL_PAD_GPIO1_IO06__ENET2_MDIO	0x1b0b0
+			MX6UL_PAD_ENET2_RX_EN__ENET2_RX_EN	0x1b0b0
+			MX6UL_PAD_ENET2_RX_ER__ENET2_RX_ER	0x1b0b0
+			MX6UL_PAD_ENET2_RX_DATA0__ENET2_RDATA00	0x1b0b0
+			MX6UL_PAD_ENET2_RX_DATA1__ENET2_RDATA01	0x1b0b0
+			MX6UL_PAD_ENET2_TX_EN__ENET2_TX_EN	0x1b0b0
+			MX6UL_PAD_ENET2_TX_DATA0__ENET2_TDATA00	0x1b0b0
+			MX6UL_PAD_ENET2_TX_DATA1__ENET2_TDATA01	0x1b0b0
+			MX6UL_PAD_ENET2_TX_CLK__ENET2_REF_CLK2	0x4001b031
+		>;
+	};
+
+	pinctrl_flexcan1: flexcan1grp {
+		fsl,pins = <
+			MX6UL_PAD_UART3_RTS_B__FLEXCAN1_RX	0x1b020
+			MX6UL_PAD_UART3_CTS_B__FLEXCAN1_TX	0x1b020
+		>;
+	};
+
+	pinctrl_flexcan2: flexcan2grp {
+		fsl,pins = <
+			MX6UL_PAD_UART2_RTS_B__FLEXCAN2_RX	0x1b020
+			MX6UL_PAD_UART2_CTS_B__FLEXCAN2_TX	0x1b020
+		>;
+	};
+};

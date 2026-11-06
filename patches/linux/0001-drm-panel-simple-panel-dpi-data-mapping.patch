@@ -1,0 +1,44 @@
+From: m6g2c build kit
+Subject: [PATCH] drm/panel: simple: support "data-mapping" for panel-dpi
+
+The panel-dpi device-tree binding documents a "data-mapping" property
+(rgb24, rgb565, bgr666), but panel-simple only implements data-mapping for
+LVDS panels (checked up to 6.12). Without it, panel-dpi has no bus format and
+mxsfb drives 24-bit RGB888, which shows wrong colours on a panel wired with
+16 data lines. Parse the property in panel_dpi_probe().
+---
+--- a/drivers/gpu/drm/panel/panel-simple.c	2026-11-05 09:58:26.837999953 -0500
++++ b/drivers/gpu/drm/panel/panel-simple.c	2026-11-05 09:58:26.850942485 -0500
+@@ -473,6 +473,32 @@
+ 	/* We do not know the connector for the DT node, so guess it */
+ 	desc->connector_type = DRM_MODE_CONNECTOR_DPI;
+ 
++	/*
++	 * Optional "data-mapping" (Documentation/devicetree/bindings/display/
++	 * panel/panel-dpi.yaml): how the pixel data is wired. Without it the
++	 * display controller assumes 24-bit RGB888, which shows wrong colours
++	 * on a panel wired with 16 data lines.
++	 */
++	{
++		const char *mapping;
++
++		if (!of_property_read_string(np, "data-mapping", &mapping)) {
++			if (!strcmp(mapping, "rgb24")) {
++				desc->bus_format = MEDIA_BUS_FMT_RGB888_1X24;
++				desc->bpc = 8;
++			} else if (!strcmp(mapping, "rgb565")) {
++				desc->bus_format = MEDIA_BUS_FMT_RGB565_1X16;
++				desc->bpc = 6;
++			} else if (!strcmp(mapping, "bgr666")) {
++				desc->bus_format = MEDIA_BUS_FMT_RGB666_1X18;
++				desc->bpc = 6;
++			} else {
++				dev_warn(dev, "%pOF: unknown data-mapping \"%s\"\n",
++					 np, mapping);
++			}
++		}
++	}
++
+ 	panel->desc = desc;
+ 
+ 	return 0;

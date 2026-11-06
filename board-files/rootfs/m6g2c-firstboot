@@ -1,0 +1,32 @@
+#!/bin/sh
+# First boot of the M6G2C image:
+#   * grow the root partition and filesystem to fill the SD card
+#   * create this board's own SSH host keys
+set -u
+
+log() { echo "m6g2c-firstboot: $*" > /dev/kmsg 2>/dev/null || echo "m6g2c-firstboot: $*"; }
+
+# Work out the root block device from the kernel's view of "/" (the mount
+# source is /dev/root when booting with root=PARTUUID= and no initramfs).
+majmin=$(mountpoint -d /)
+sysdev=$(readlink -f "/sys/dev/block/$majmin")
+part=$(basename "$sysdev")
+disk=$(basename "$(dirname "$sysdev")")
+partnum=$(cat "$sysdev/partition")
+
+if [ -b "/dev/$disk" ] && [ -b "/dev/$part" ]; then
+	log "growing /dev/$part to fill /dev/$disk"
+	growpart "/dev/$disk" "$partnum" || true   # exit 1 = already full size
+	resize2fs "/dev/$part" || log "resize2fs failed"
+else
+	log "could not identify the root device ($majmin), not resizing"
+fi
+
+if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
+	log "generating SSH host keys"
+	ssh-keygen -A
+fi
+
+rm -f /etc/m6g2c-firstboot
+systemctl disable m6g2c-firstboot.service
+exit 0

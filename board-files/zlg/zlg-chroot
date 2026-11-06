@@ -1,0 +1,206 @@
+#!/bin/sh
+# Prepare /srv/zlg (ZLG's system, copied by zlg-import) for its programs:
+# mounts, DNS, and the safe parts of ZLG's own start-up (rcS, ginit.sh).
+#
+#   zlg-chroot start | stop        (zlg-chroot.service does this)
+#   zlg-chroot shell               a shell inside, with ZLG's environment
+#   zlg-chroot offset              update the clock offset (zlg-offset.timer)
+#   zlg-chroot run DIR CMD [ARG..] run CMD in DIR inside (the services use this)
+#
+# Left out of ZLG's start-up on purpose, because Debian does it or because it
+# would disturb Debian: hwclock, ifconfig/udhcpc (eth0, wlan0), inetd,
+# dropbear, Wi-Fi start-up and driver reloads, modprobe/rmmod, setting the
+# clock, plc.sh's process checks (systemd restarts the programs instead) and
+# the USB-stick updater. A reboot from inside restarts zlg.target instead.
+set -eu
+
+ROOT=/srv/zlg
+# shellcheck disable=SC1091
+[ -r /etc/default/zlg ] && . /etc/default/zlg
+
+# ZLG's system kept its clock on local time labelled UTC, and NEP's software
+# depends on it (local times in its files, strtotime() epochs for the
+# charts, cron at local hours). zlg-time.so, preloaded into its programs,
+# shows them the clock shifted by the board's UTC offset; TZ stays UTC as on
+# ZLG's system. The board's own clock stays on real UTC.
+PRELOAD=/usr/local/lib/zlg/zlg-time.so
+
+utc_offset() {	# seconds east of UTC now, from the board's time zone
+	if [ -n "${ZLG_UTC_OFFSET:-}" ]; then
+		echo "$ZLG_UTC_OFFSET"
+		return
+	fi
+	z=$(date +%z)			# e.g. -0500
+	sign=${z%????}; hh=${z#?}; mm=${hh#??}; hh=${hh%??}
+	hh=${hh#0}; mm=${mm#0}
+	echo "${sign}$(( hh * 3600 + mm * 60 ))" | sed "s/^+//"
+}
+
+write_offset() {
+	mkdir -p /run/zlg
+	utc_offset > /run/zlg/utcoffset.new && mv /run/zlg/utcoffset.new /run/zlg/utcoffset
+}
+
+env_run() {
+	chroot "$ROOT" /usr/bin/env -i \
+		PATH=/m6g2c/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin \
+		LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib \
+		HOME=/root TERM="${TERM:-vt100}" TZ=UTC0 \
+		LD_PRELOAD=/m6g2c/lib/zlg-time.so "$@"
+}
+
+mnt() {	# mnt TARGET mount-args...
+	t=$1; shift
+	# a symlink in ZLG's tree would be followed on the host: skip it
+	if [ -L "$ROOT$t" ]; then
+		echo "zlg-chroot: $t is a symlink in $ROOT, not mounting it" >&2
+		return 0
+	fi
+	mkdir -p "$ROOT$t"
+	mountpoint -q "$ROOT$t" || mount "$@" "$ROOT$t"
+}
+
+start() {
+	[ -x "$ROOT/root/Gateway/gateway-plc" ] || {
+		echo "zlg-chroot: $ROOT is empty; run zlg-import first" >&2
+		exit 1
+	}
+	mnt /proc -t proc proc
+	mnt /sys -t sysfs sysfs
+	mnt /dev --bind /dev
+	mnt /dev/pts --bind /dev/pts
+	mnt /dev/shm --bind /dev/shm
+	# ZLG's ginit.sh empties /tmp: give it its own; /var was a tmpfs there too
+	mnt /tmp -t tmpfs -o mode=1777,size=32m tmpfs
+	mnt /var -t tmpfs -o mode=755,size=16m tmpfs
+	mnt /run -t tmpfs -o mode=755,size=8m tmpfs
+
+	# DNS: systemd-resolved's stub works inside (same network namespace)
+	rm -f "$ROOT/etc/resolv.conf"
+	cp -L /etc/resolv.conf "$ROOT/etc/resolv.conf"
+
+	# Requests from inside (reboot -> restart of zlg.target, see
+	# zlg-restart.path) arrive in the host's /run/zlg.
+	mkdir -p /run/zlg
+	mnt /m6g2c/run --bind /run/zlg
+
+	# Stand-ins for commands ZLG's scripts must not run here, first in PATH
+	B="$ROOT/m6g2c/bin"
+	mkdir -p "$B"
+	rm -f "$B"/*
+	printf '#!/bin/sh\n# no-op stand-in (zlg-chroot): Debian handles this\nexit 0\n' > "$B/zlg-noop"
+	for c in crond hwclock udhcpc udhcpd modprobe rmmod insmod wpa_supplicant \
+		 wpa_cli hostapd iwconfig iwpriv ip route ntpdate rdate timeAdjust; do
+		ln -s zlg-noop "$B/$c"
+	done
+	# ifconfig: show interfaces (ginit.sh reads the address), never change them
+	printf '#!/bin/sh\n[ $# -le 1 ] && exec /sbin/ifconfig "$@"\nexit 0\n' > "$B/ifconfig"
+	# date: read the time, never set it (Debian keeps the clock)
+	cat > "$B/date" <<-'EOF2'
+	#!/bin/sh
+	for a in "$@"; do
+		case "$a" in -s|--set|-s*|[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*) exit 0 ;; esac
+	done
+	exec /bin/date "$@"
+	EOF2
+	# killall: only ZLG's own programs (it would hit Debian's daemons too)
+	cat > "$B/killall" <<-'EOF2'
+	#!/bin/sh
+	for a in "$@"; do
+		case "$a" in
+		-*) ;;
+		gateway-*|nsync|my_nsync|arm_data_sent|php|php-cgi) ;;
+		*) exit 0 ;;
+		esac
+	done
+	for k in /usr/bin/killall /bin/killall; do [ -x "$k" ] && exec "$k" "$@"; done
+	exit 0
+	EOF2
+	# reboot (ZLG's day_clean.sh reboots at 01:00): restart ZLG's services
+	printf '#!/bin/sh\ntouch /m6g2c/run/restart\nexit 0\n' > "$B/reboot"
+	ln -s reboot "$B/halt"
+	ln -s reboot "$B/poweroff"
+	chmod 755 "$B"/*
+
+	# the shifted clock (zlg-time.so) and its offset
+	write_offset
+	[ -f "$PRELOAD" ] || {
+		echo "zlg-chroot: $PRELOAD is missing (see README section 9)" >&2
+		exit 1
+	}
+	mkdir -p "$ROOT/m6g2c/lib"
+	cp "$PRELOAD" "$ROOT/m6g2c/lib/zlg-time.so"
+	# PHP: UTC, as on ZLG's system (an earlier version of this script set
+	# the board's zone here)
+	for ini in "$ROOT"/opt/php5/lib/php.ini; do
+		[ -f "$ini" ] && sed -i 's#^[[:space:]]*date\.timezone.*#date.timezone = UTC#' "$ini"
+	done
+	# The web pages' "Last updated" subtracted China's offset (8 h); with
+	# the clock on local time it shows local time as UTC
+	for v in "$ROOT"/root/Gateway/nep/application/views/*.php; do
+		[ -f "$v" ] || continue
+		sed -i -E \
+			-e 's/new Date\(result\.(t|time)\*1000-28800000\)/new Date(result.\1*1000)/' \
+			-e 's/updatet\.toLocaleString\(\)/updatet.toLocaleString(undefined,{timeZone:"UTC"})/' \
+			"$v"
+	done
+	rl="$ROOT/root/Gateway/nep/application/controllers/realdata.php"
+	[ -f "$rl" ] && sed -i 's/time() \* 1000+28800000;/time() * 1000;/' "$rl"
+
+	# rcS
+	env_run /bin/sh -c 'mkdir -p /var/empty /var/log /var/lock /var/run /var/tmp /var/lib/dbus'
+	[ -e /dev/ttySAC0 ] || ln -s ttymxc0 /dev/ttySAC0
+	# ZLG's boot script /usr/local/bin/gateway, without what systemd or
+	# Debian does: starting the programs (zlg-*.service), the Wi-Fi
+	# start-up, setting the clock, and its pauses.
+	if [ -f "$ROOT/usr/local/bin/gateway" ]; then
+		# (replaced by ":", so if/else bodies stay valid)
+		sed -E \
+			-e 's/^[[:space:]]*\/usr\/bin\/nohup .*/:/' \
+			-e 's/^[[:space:]]*\/root\/Gateway\/[^ ]*gateway-[a-z-]+.*&[[:space:]]*$/:/' \
+			-e 's/^[[:space:]]*sleep [0-9]+[[:space:]]*$/:/' \
+			-e 's/^[[:space:]]*\/usr\/local\/bin\/timeAdjust.*/:/' \
+			-e 's#^([[:space:]]*(source|\.)[[:space:]]+/etc/profile.*)#\1; export PATH=/m6g2c/bin:$PATH#' \
+			"$ROOT/usr/local/bin/gateway" > "$ROOT/m6g2c/boot.sh"
+		env_run /bin/sh -c 'cd /root && /bin/sh /m6g2c/boot.sh' >/dev/null 2>&1 || true
+	fi
+	# ginit.sh: crontab, permissions, localip/localport/modcount files
+	if [ -f "$ROOT/opt/ginit.sh" ]; then
+		env_run /bin/sh -c 'cd /root && /bin/sh /opt/ginit.sh' >/dev/null 2>&1 || true
+	fi
+	# plc.sh's checks are done by systemd (zlg-*.service)
+	for f in /var/spool/cron/crontabs/root; do
+		[ -f "$ROOT$f" ] || continue
+		# BusyBox crond may reset PATH: give every job the stand-ins
+		# ZLG_LOCAL_ONLY=1: no uploads to NEP's cloud (my_nsync -> nsync ->
+		# php remote, to nepviewer.com). gdata.sh stays: its lsync runs
+		# php proxy, which writes the web pages' per-inverter status files.
+		if [ "${ZLG_LOCAL_ONLY:-0}" = 1 ]; then
+			sed -i -E '/my_nsync|killall nsync/d' "$ROOT$f"
+		fi
+		sed -i -E -e '/plc\.sh/d' \
+			-e '/^[[:space:]]*(#|$)/!s#^(([^[:space:]]+[[:space:]]+){5})#\1export PATH=/m6g2c/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin; #' \
+			"$ROOT$f"
+	done
+	echo "zlg-chroot: ready (clock offset $(cat /run/zlg/utcoffset) s)"
+}
+
+stop() {
+	for t in /m6g2c/run /run /var /tmp /dev/shm /dev/pts /dev /sys /proc; do
+		[ -L "$ROOT$t" ] && continue
+		mountpoint -q "$ROOT$t" && umount -l "$ROOT$t"
+	done
+	return 0
+}
+
+case "${1:-}" in
+start) start ;;
+offset) write_offset ;;
+stop) stop ;;
+shell) env_run /bin/sh -l ;;
+run)
+	[ $# -ge 3 ] || { echo "usage: zlg-chroot run DIR CMD [ARG...]" >&2; exit 2; }
+	dir=$2; shift 2
+	env_run /bin/sh -c 'cd "$0" && exec "$@"' "$dir" "$@" ;;
+*) echo "usage: zlg-chroot start|stop|shell|run DIR CMD [ARG...]" >&2; exit 2 ;;
+esac

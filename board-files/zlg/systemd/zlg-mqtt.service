@@ -1,0 +1,19 @@
+[Unit]
+Description=ZLG gateway: MQTT link to NEP's server (gateway-mqtt-nep)
+BindsTo=zlg-chroot.service
+After=zlg-chroot.service
+PartOf=zlg.target
+
+[Service]
+# skipped (not failed) when this version of ZLG's software doesn't have it;
+# checked inside /srv/zlg, where its links point
+ExecCondition=/usr/local/sbin/zlg-chroot run / /bin/sh -c "test -e /root/Gateway/mqtt/gateway-mqtt-nep"
+ExecStart=/usr/local/sbin/zlg-chroot run /root/Gateway/mqtt ./gateway-mqtt-nep
+Restart=always
+RestartSec=10
+# NEP's programs log to files or /dev/null themselves
+StandardOutput=null
+
+
+[Install]
+WantedBy=zlg.target

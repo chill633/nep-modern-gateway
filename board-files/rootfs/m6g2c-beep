@@ -1,0 +1,42 @@
+#!/bin/bash
+# Sound the EPC-M6G2C beeper (pwm-beeper on PWM6).
+#
+#   m6g2c-beep                 2.5 kHz for 100 ms
+#   m6g2c-beep 1000 500        1 kHz for 500 ms
+#   m6g2c-beep 2500 100 3      three beeps (100 ms on, 100 ms off)
+#
+# Writes EV_SND/SND_TONE input events to the beeper's /dev/input/eventN.
+# Needs root or membership of the "input" group.
+set -eu
+
+freq=${1:-2500} ms=${2:-100} count=${3:-1}
+case "$freq$ms$count" in *[!0-9]*) echo "usage: $0 [Hz] [ms] [count]" >&2; exit 2 ;; esac
+
+dev=""
+for n in /sys/class/input/input*/name; do
+	if [ "$(cat "$n" 2>/dev/null)" = pwm-beeper ]; then
+		ev=$(basename "$(dirname "$n")"/event* 2>/dev/null)
+		dev=/dev/input/$ev
+		break
+	fi
+done
+[ -c "$dev" ] || { echo "$0: pwm-beeper input device not found" >&2; exit 1; }
+
+# struct input_event on armhf: 32-bit tv_sec, 32-bit tv_usec, u16 type,
+# u16 code, s32 value, all little-endian (16 bytes). The time is ignored.
+event() {  # event <value>
+	local v
+	v=$(printf '%08x' "$1")
+	printf "\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x12\\x00\\x02\\x00\\x${v:6:2}\\x${v:4:2}\\x${v:2:2}\\x${v:0:2}"
+}
+
+secs=$(printf '%d.%03d' $((ms / 1000)) $((ms % 1000)))
+
+exec 3>"$dev"
+trap 'event 0 >&3' EXIT
+for ((i = 0; i < count; i++)); do
+	[ "$i" -eq 0 ] || sleep "$secs"
+	event "$freq" >&3
+	sleep "$secs"
+	event 0 >&3
+done

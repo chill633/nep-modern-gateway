@@ -1,0 +1,7 @@
+[Unit]
+Description=ZLG gateway software (NEP), from /srv/zlg
+Requires=zlg-chroot.service
+After=zlg-chroot.service
+
+[Install]
+WantedBy=multi-user.target

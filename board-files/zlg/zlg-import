@@ -1,0 +1,64 @@
+#!/bin/sh
+# Copy ZLG's factory root filesystem from the on-board NAND to /srv/zlg, so
+# its gateway software can run there in a chroot (see zlg-chroot).
+#
+#   sudo zlg-import            first copy
+#   sudo zlg-import --force    copy again, replacing /srv/zlg (its data too!)
+#
+# The NAND is attached and mounted read-only; nothing is written to it.
+set -eu
+
+ROOT=/srv/zlg
+MNT=/run/zlg-nand
+FORCE=0
+[ "${1:-}" = --force ] && FORCE=1
+
+die() { echo "zlg-import: $*" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || die "run as root"
+
+if [ -e "$ROOT/root/Gateway" ] && [ $FORCE -eq 0 ]; then
+	die "$ROOT already holds a copy (its data may be newer than the NAND's); use --force to replace it"
+fi
+if systemctl is-active -q zlg.target 2>/dev/null; then
+	die "stop the services first: systemctl stop zlg.target"
+fi
+
+# NAND partition "rootfs" (ZLG's UBI volume "rootfs")
+MTD=$(awk -F: '/"rootfs"/ {sub("mtd", "", $1); print $1}' /proc/mtd)
+[ -n "$MTD" ] || die "no NAND partition named rootfs (is M6G2C_ENABLE_NAND on?)"
+UBI=""
+for d in /sys/class/ubi/ubi[0-9]*; do
+	[ -e "$d/mtd_num" ] && [ "$(cat "$d/mtd_num")" = "$MTD" ] && UBI=${d##*/}
+done
+if [ -z "$UBI" ]; then
+	ubiattach -p "/dev/mtd$MTD" >/dev/null
+	for d in /sys/class/ubi/ubi[0-9]*; do
+		[ "$(cat "$d/mtd_num")" = "$MTD" ] && UBI=${d##*/}
+	done
+fi
+[ -n "$UBI" ] || die "could not attach /dev/mtd$MTD"
+
+mkdir -p "$MNT"
+mountpoint -q "$MNT" || mount -t ubifs -o ro "$UBI:rootfs" "$MNT"
+trap 'umount "$MNT" 2>/dev/null || true' EXIT
+
+[ -x "$MNT/root/Gateway/gateway-plc" ] || die "$MNT doesn't look like ZLG's gateway system"
+
+if [ -e "$ROOT" ]; then
+	# never delete through a live bind mount
+	if grep -q " $ROOT/" /proc/mounts; then
+		die "something is mounted under $ROOT; run: zlg-chroot stop"
+	fi
+	rm -rf "$ROOT"
+fi
+mkdir -p "$ROOT"
+echo "Copying ZLG's system to $ROOT ..."
+# cp -a keeps owners, modes (including setuid), links and device nodes
+cp -a "$MNT/." "$ROOT/"
+# the runtime trees get fresh mounts
+for d in proc sys tmp run dev; do
+	[ -d "$ROOT/$d" ] && [ ! -L "$ROOT/$d" ] && find "$ROOT/$d" -mindepth 1 -delete 2>/dev/null || true
+done
+sync
+echo "Done: $(du -sh "$ROOT" | cut -f1) in $ROOT."
+echo "Start it with:  systemctl enable --now zlg.target"

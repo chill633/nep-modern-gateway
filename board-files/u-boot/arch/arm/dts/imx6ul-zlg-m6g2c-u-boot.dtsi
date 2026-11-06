@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: GPL-2.0+
+/* Nodes U-Boot needs before relocation (console and its pinmux). */
+
+&{/aliases} {
+	bootph-all;
+};
+
+&soc {
+	bootph-all;
+};
+
+&aips1 {
+	bootph-all;
+};
+
+&aips2 {
+	bootph-all;
+};
+
+&iomuxc {
+	bootph-all;
+};
+
+&uart1 {
+	bootph-all;
+};
+
+&pinctrl_uart1 {
+	bootph-all;
+};
