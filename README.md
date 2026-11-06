@@ -549,8 +549,11 @@ systemctl list-units 'zlg*'
   and both stop if the gateway runs another version, naming the branch to
   use instead. `--any-firmware` skips the check.
 * `sudo zlg-chroot shell` opens a shell inside the copy with ZLG's environment.
-* `ZLG_LOCAL_ONLY=1` in `/etc/default/zlg` drops the cron jobs that upload to
-  NEP's cloud (`my_nsync` -> `php remote`, nepviewer.com). Data collection,
+* `ZLG_LOCAL_ONLY=1` in `/etc/default/zlg` cuts every link to NEP's cloud:
+  it drops the cron jobs that upload to it (`my_nsync` -> `php remote`,
+  nepviewer.com, and newer firmware's `critical_alert.php`) and doesn't
+  start `gateway-mqtt-nep`, newer firmware's MQTT link to
+  `broker.nepviewer.com`. Data collection,
   the reports and the local web pages carry on; the pages' per-inverter
   status files come from `gdata.sh` -> `lsync` -> `php proxy`, which is local.
 * Programs a given NEP version doesn't have (older ones have no
