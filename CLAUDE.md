@@ -187,6 +187,32 @@ Made on nep-fw-20210303 and merged into nep-fw-20230903:
   (NEP-xxxxx) on the Old unit.
 - README: firmware 20230903 and the New unit in the top note and in 7a.
 
+## Outbound traffic and blocked pages (2026-11-06)
+
+What the gateway itself contacts (asked by the user): api.open-meteo.com
+hourly (weather, HTTPS, IPv4), Debian's NTP pool (systemd-timesyncd),
+deb.debian.org / security.debian.org only when apt runs (install-web.sh or
+by hand; apt-daily timers off, APT_DAILY=0), and DHCP/DNS to the router.
+The Weather page's OpenStreetMap map is loaded by the viewer's browser,
+not the gateway. Cut by local-only: my_nsync/remote, gateway-mqtt-nep,
+critical_alert.php. NEP's binaries are closed source; one snapshot of the
+New unit showed no outside connections. Offered but not done: a day-long
+outbound connection log, an outbound firewall.
+
+Email reports on the Old unit: off. /opt/config/report has r1-r3, a1, a2
+all 0; the recipient would come from /opt/config/general (`email`), which
+doesn't exist; gene.sh only builds the reports via curl to /nep/report/*
+and sets /tmp marker files that nothing reads (NEP's send.sh /
+send_alert_*.sh cron lines are commented out in ginit.sh).
+/opt/config/email holds NEP's factory mail settings, not the user's. The New unit wasn't
+checked. The report controller's send() uses smtp_host from that file.
+
+zlg-web-port blocks (routes to status) home/info, home/show,
+maildebug and report/send. The routes use `(?i)`: CodeIgniter finds the controller file by
+ucfirst() and PHP methods are case-insensitive, so without it
+/nep/Home/info and /nep/Maildebug/index were still reachable. Verified on both units with variants (Report/send,
+report/SEND, ...); /nep/report/day etc. still work (gene.sh needs them).
+
 ## Repository and access
 
 - GitHub: chill633/nep-modern-gateway (private; renamed from chill633/claude,
