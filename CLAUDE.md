@@ -204,6 +204,19 @@ The user edits the README's wording; keep their decisions:
 Declined by the user: baking a /srv/zlg snapshot into the image and
 building without NAND (M6G2C_ENABLE_NAND=0). zlg-import from the NAND stays.
 
+## Shared fixes from the New unit (2026-11-06)
+
+Made on nep-fw-20210303 and merged into nep-fw-20230903:
+- Local-only mode (ZLG_LOCAL_ONLY=1) also cuts firmware 20230903's cloud
+  links: zlg-mqtt.service has `ExecCondition=zlg-chroot local-only-off`
+  (skips gateway-mqtt-nep, MQTT to broker.nepviewer.com:8883), and
+  zlg-chroot drops the critical_alert.php cron line along with my_nsync.
+  Harmless on 20210303, which has neither.
+- install-web.sh restarts zlg.target when /srv/zlg/opt/php5/bin/php isn't
+  the PHP 8.4 wrapper: on a fresh install zlg-chroot starts before PHP 8.4
+  is installed, so the cron scripts kept PHP 5 and NEP's dead Yahoo wea.
+- README: firmware 20230903 and the New unit in the top note and in 7a.
+
 ## Repository and access
 
 - GitHub: chill633/nep-modern-gateway (private; renamed from chill633/claude,
@@ -221,13 +234,29 @@ building without NAND (M6G2C_ENABLE_NAND=0). zlg-import from the NAND stays.
   gateway.cfg) and install-web.sh (the copy's), --any-firmware skips it.
   Fixes to the shared parts (U-Boot, kernel, rootfs, watchdog, Wi-Fi, the
   zlg kit) are made on nep-fw-20210303 and merged into nep-fw-20230903.
-- The board password isn't stored anywhere; ask the user for it (they plan
-  to change it) or have them run board-side commands.
+- Working on nep-fw-20230903 without leaving this checkout: `git worktree
+  add <scratch>/wt-20230903 nep-fw-20230903`, merge or edit there, push,
+  then `git worktree remove`. To build its board bundle, copy the
+  git-ignored board-files/zlg/web/deps/ and board-files/zlg/zlg-time.so
+  into the worktree first.
+- Parts of the README differ per branch on purpose: the firmware note and
+  the Status note at the top, the 7a list of when to compare on port 8080
+  (each branch describes its own firmware first), and section 9's
+  20230903 test record. When merging nep-fw-20210303 into nep-fw-20230903,
+  keep nep-fw-20230903's wording there (the top note conflicted once,
+  2026-11-06), and check that board-files/zlg/nep-firmware still says
+  20230903.
+- Passwords aren't stored in the repository. The user gives them per
+  session (SD systems: user debian; the New unit's factory system: root);
+  keep them only in the session scratch folder and delete them when asked.
+  The user plans to change them at the end of the project.
 
 ## Working with the user
 
-- Hardware access is only through the user: they run commands on the board
-  and paste output; serial console is output-only (TX not connected).
+- Hardware access: over SSH with the passwords the user gives per session,
+  or the user runs commands and pastes output. The serial console is
+  output only (TX not connected). Never stop the Old unit's services for
+  tests that would interrupt its readings (it is in production).
 - Board: `debian@192.168.1.183` on Wi-Fi, hostname **NEP-xxxxx** (since
   2026-11-06; was m6g2c). zlg-chroot's set_hostname names the board
   `NEP-<last 5 characters of SN=>` from /srv/zlg/root/Gateway/sn (serial
