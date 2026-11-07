@@ -54,8 +54,8 @@ tree, and a **Debian 13 "trixie" armhf** root filesystem.
 > gateway software and the modernised web interface (section 7), until the
 > 20230903 gateway replaced it on 6 November 2026. The hardware and the
 > software have been tested on that unit and work; see section 9 for
-> exactly what was checked. Nothing needs re-checking there. The checks in section 4 are for a different
-> unit or carrier board.
+> exactly what was checked. Nothing needs re-checking there. The checks in
+> section 4 are for a different unit or carrier board.
 
 ```
 SD card
