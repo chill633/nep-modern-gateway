@@ -331,7 +331,30 @@ plc_module=1, /dev/ttymxc1, utcoffset -18000, local weather.
 First live readings on that unit still to be confirmed. The Old unit
 (192.168.1.183, NEP-xxxxx) is now free for tests (e.g. the ttymxc1
 logging pass-through or the plc_set -m scan); its misetup must still
-never write inverter settings.
+never write inverter settings. Since the switch the Old unit is off the
+network (no route to 192.168.1.183).
+
+Wi-Fi at the New unit's production spot (2026-11-06, log read only): the
+link is weak (-64 to -68 dBm, rx bitrate 2 Mbit/s, repeated
+CTRL-EVENT-BEACON-LOSS; the APs also dropped it with reason=34 in the
+15:35-19:10 boot; no problems at its earlier spot). After a beacon-loss
+disconnect the RTL8192EU (rtl8xxxu) can't authenticate with any of the
+user's four access points ("authentication ... timed out") until the dongle
+is unplugged and replugged; the user did that twice (20:12, 20:18). Power
+save is off. Other boot warnings are harmless (unclean journal after the
+move, mi200e -ENXIO, iwconfig wext, networkd "Could not set hostname").
+Options given: Ethernet (eth0 is configured, cable unplugged), a USB
+extension or a dongle with an antenna, or a kit service that resets the
+dongle when it can't reconnect. The user will fix the signal on
+2026-11-07; the reset service was not wanted for now.
+
+## Vendor security report (2026-11-06)
+
+The user plans to report NEP's vulnerabilities to the vendor. The report
+is local only: ~/Working/NEP-BDG-256-security-report.md (outside the
+public repository; never commit it). It covers firmware 20230903 only (the
+user: reporting the old firmware would just get "update"), with no serials,
+IDs or location, and states that it is static analysis only. The findings are only in the report.
 
 ## Repository and access
 
