@@ -53,9 +53,10 @@ tree, and a **Debian 13 "trixie" armhf** root filesystem.
 > `gateway-mqtt-nep` (MQTT to `broker.nepviewer.com`) and the cron job
 > `critical_alert.php`; local-only mode cuts both (section 7).
 
-> **Status:** this image runs on a gateway with firmware 20230903 (the
-> "New" unit), together with NEP's gateway software and the modernised web
-> interface on port 80 (section 7). The rest of this README describes the
+> **Status:** this image runs in production on a gateway with firmware
+> 20230903 (the "New" unit), together with NEP's gateway software and the
+> modernised web interface on port 80 (section 7). It replaced the 20210303
+> gateway on 6 November 2026. The rest of this README describes the
 > hardware and the setup, which are the same as for firmware 20210303; see
 > section 9 for what was checked on the 20230903 gateway. The checks in
 > section 4 are for a different unit or carrier board.
@@ -572,11 +573,10 @@ systemctl list-units 'zlg*'
   network. The map on the Weather page is loaded by your browser from
   OpenStreetMap, not by the gateway. NEP's own programs are closed source;
   no connection from them to the outside has been seen.
-* **Email reports** are NEP's, built hourly by `gene.sh`. On the 20210303
-  gateway they are off: the report switches in `/opt/config/report` are all
+* **Email reports** are NEP's, built hourly by `gene.sh`, and are off on
+  both gateways: the report switches in `/opt/config/report` are all
   `0`, no recipient is set (`/opt/config/general`), and the jobs that would
-  send them are commented out in NEP's `ginit.sh`. They weren't checked on
-  the 20230903 gateway; the same files tell. `/opt/config/email`
+  send them are commented out in NEP's `ginit.sh`. `/opt/config/email`
   holds NEP's own factory mail settings, not
   yours.
 * Programs a given NEP version doesn't have (older ones have no
@@ -717,18 +717,18 @@ trixie image:**
   Energy Output charts (Highcharts 13), Alert, Layout and the Weather page
   with its weather and map; the history carried over from the factory
   system. ZLG's server is off.
-* **Not tested:** live inverter readings. That gateway is too far from the
-  inverters to reach them over the power line, and the inverters it is set
-  up for are run by the 20210303 gateway in production. The inverter link
-  is the same serial PLC module and the same `gateway-plc` set-up as on the
-  20210303 gateway, where it works.
+* In production since the evening of 6 November 2026, replacing the
+  20210303 gateway, with the same 24 inverter modules configured. Live
+  inverter readings aren't confirmed yet: it went in after dark. The
+  inverter link is the same serial PLC module and the same `gateway-plc`
+  set-up as on the 20210303 gateway, where it works.
 
 The rest of this section is the 20210303 gateway's test record, which
 covers the shared parts (U-Boot, kernel, hardware).
 
 
-**On the EPC-M6G2C this kit was developed on (the production unit), running
-the trixie image:**
+**On the EPC-M6G2C this kit was developed on (the "Old" unit, firmware
+20210303, in production until 6 November 2026), running the trixie image:**
 
 * Boot: U-Boot 2024.01 (this kit's board port) and Linux 6.12.115 from the
   SD card, with the external hardware watchdog fed from power-on (section
