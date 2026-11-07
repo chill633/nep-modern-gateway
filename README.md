@@ -372,6 +372,16 @@ the address, and `journalctl -u wpa_supplicant@wlan0` any errors. To change
 networks later, edit the config file (`wpa_passphrase "SSID" "pass"` makes the
 `network={}` block), then `sudo systemctl restart wpa_supplicant@wlan0`.
 
+**Signal.** The dongle sits under the Gateway's metal case, which weakens
+it. Where the signal is poor (seen at about -65 dBm with the receive rate
+down to 2 Mbit/s), the link drops every so often (`CTRL-EVENT-BEACON-LOSS`
+in `journalctl -u wpa_supplicant@wlan0`, "beacon loss" in
+`iw dev wlan0 station dump`). After such a drop `rtl8xxxu` can get stuck:
+every attempt to reconnect ends in "authentication with ... timed out", and
+only unplugging and replugging the dongle brings it back. For a gateway in
+a poor spot, use Ethernet, a short USB extension cable to get the dongle
+out from under the case, or a dongle with an external antenna.
+
 The kernel only trusts the upstream-signed copy of the Wi-Fi regulatory
 database, so the rootfs stage selects `/lib/firmware/regulatory.db-upstream`.
 Otherwise the kernel logs "regulatory.db is malformed" and ignores
@@ -563,7 +573,7 @@ systemctl list-units 'zlg*'
   it drops the cron jobs that upload to it (`my_nsync` -> `php remote`,
   nepviewer.com, and newer firmware's `critical_alert.php`) and doesn't
   start `gateway-mqtt-nep`, newer firmware's MQTT link to
-  `broker.nepviewer.com`. Data collection,
+  `broker.nepviewer.com`. That also stops NEP's cloud client from installing NEP's updates. Data collection,
   the reports and the local web pages carry on; the pages' per-inverter
   status files come from `gdata.sh` -> `lsync` -> `php proxy`, which is local.
 * **What the gateway connects to,** with local-only mode on: Open-Meteo once
@@ -613,6 +623,17 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   and 1.9, Highcharts 2, simpletooltip, Modernizr, poshytip) are still in
   `nep/static/js/` but lighttpd refuses them (403), so no page can load them.
 * `misetup/` (the inverter grid-profile tool) is not served. ZLG's server, which serves it, is switched off.
+  `misetup` reads and writes the microinverters' grid settings: one of 41
+  country profiles (`misetup/setting/*.conf`; for the US `US-240`,
+  `US-240-1547A` for IEEE 1547, `US-240-RULE21`, `US-HECO-240` and 208 V
+  versions), which sets 50 or 60 Hz, the voltage and frequency trip limits
+  and clearing times, the power limit, the reconnect time and, for 1547 and
+  Rule 21, the volt-var, volt-watt and ramp functions. It stops
+  `gateway-plc` while it works ("Setup Mode"). **Don't write settings with
+  firmware 20210303's `misetup` to 800B inverters (IDs starting `33`):** it
+  doesn't know that model and would encode the voltage trips about 17
+  times too low and the power limit doubled. Firmware 20230903's `misetup`
+  handles the 800B.
 
 This is installed and running on port 80 on the 20230903 gateway. The steps
 below are for a fresh install or an update. Fetch the open-source parts on
