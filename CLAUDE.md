@@ -301,8 +301,14 @@ never write inverter settings.
 
 ## Repository and access
 
-- GitHub: chill633/nep-modern-gateway (private; renamed from chill633/claude,
-  which redirects). Local checkout: ~/Working/nep-modern-gateway. gh is
+- GitHub: chill633/nep-modern-gateway (**public**; renamed from
+  chill633/claude, which redirects). Keep identifying details out of
+  everything committed (files and commit messages): gateway serial numbers
+  and the real hostnames (NEP- + the serial's last five characters; the
+  docs say NEP-xxxxx for the Old unit, NEP-yyyyy for the New one), inverter
+  IDs, the user's location or coordinates, passwords, Wi-Fi details. On
+  2026-11-06 they were removed from both branches' history (filter-branch,
+  force-pushed). Use the IP addresses to reach the boards. Local checkout: ~/Working/nep-modern-gateway. gh is
   installed and logged in.
 - Branches per NEP firmware major version (`major=` under [version] in
   /root/Gateway/gateway.cfg): **nep-fw-20210303** (default; the "Old"
