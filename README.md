@@ -768,12 +768,14 @@ trixie image:**
   system. ZLG's server is off.
 * In production since the evening of 6 November 2026, replacing the
   20210303 gateway, with the same 24 inverter modules configured. Live
-  inverter readings aren't confirmed yet: it went in after dark. The
-  inverter link is the same serial PLC module and the same `gateway-plc`
-  set-up as on the 20210303 gateway, where it works.
-* Wi-Fi at its production spot is weak (about -65 dBm, 2 Mbit/s receive
-  rate); the link dropped twice on the first evening and the dongle had to
-  be replugged each time (section 5a, "Signal").
+  inverter readings from the next morning on: every connected module
+  reports, over the same serial PLC module and `gateway-plc` set-up as on
+  the 20210303 gateway.
+* Wi-Fi at its production spot was weak with the TL-WN823N (about -65 dBm,
+  2 Mbit/s receive rate); the link dropped twice on the first evening and
+  the dongle had to be replugged each time. Since 7 November it uses a
+  TL-WN722N v1 (`ath9k_htc`) on a USB extension cable: about -52 dBm and
+  72 Mbit/s (section 5a, "Signal").
 
 The rest of this section is the 20210303 gateway's test record, which
 covers the shared parts (U-Boot, kernel, hardware).

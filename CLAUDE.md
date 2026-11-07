@@ -27,8 +27,8 @@ on, local weather. Findings:
   Until 2026-11-06 the New unit was out of power-line range of them and
   the Old unit ran them. That evening the user put the New unit into
   production in the Old one's place (see "Production moved to the New
-  unit"); first live readings expected the next morning, not yet
-  confirmed. Don't stop its zlg-plc for tests now.
+  unit"); live readings confirmed on 2026-11-07. Don't stop its zlg-plc
+  for tests now.
 - Found here and fixed in shared code: on a fresh install zlg-chroot
   starts before install-web.sh installs PHP 8.4, so the cron scripts kept
   PHP 5 and NEP's Yahoo wea; install-web.sh now restarts zlg.target when
