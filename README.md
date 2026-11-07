@@ -345,13 +345,24 @@ Remove `read-only` from a partition only once you intend to take over the
 NAND, for example to install this system into it with `mtd-utils`/UBI
 (included).
 
-## 5a. Wi-Fi (TP-Link TL-WN823N USB dongle)
+## 5a. Wi-Fi (USB dongle)
 
-The dongle that ships with the EPC-M6G2C works with the in-kernel
-`rtl8xxxu` driver: v2/v3 (USB ID 2357:0109) use the RTL8192EU chip, v1 the
-RTL8192CU. Its firmware comes from Debian's `firmware-realtek` package. Plug
-it into the USB-A port on the bottom of the Gateway; `lsusb` shows which
-version you have.
+Two dongles work:
+
+* **TP-Link TL-WN823N**, the dongle NEP ships with the Gateway. It uses the
+  in-kernel `rtl8xxxu` driver: v2/v3 (USB ID 2357:0109) have the RTL8192EU
+  chip, v1 the RTL8192CU. Its firmware comes from Debian's
+  `firmware-realtek` package. It has a weak signal; see **Signal** below.
+* **TP-Link TL-WN722N v1** (Atheros AR9271, USB ID 0cf3:9271), with an
+  external antenna; recommended. It uses the in-kernel `ath9k_htc` driver,
+  and its firmware comes from Debian's open-source `firmware-ath9k-htc`
+  package. Only v1 has the AR9271: v2 and v3 have a Realtek RTL8188EUS,
+  which `rtl8xxxu` supports but which hasn't been tested here.
+
+Plug the dongle into the USB-A port on the bottom of the Gateway; `lsusb`
+shows which one (and which version) you have. The TL-WN722N with its
+antenna doesn't fit inside the Gateway's weatherproof housing, so it needs
+a short USB-A extension cable (male to female).
 
 Set the network in `local.env` (next to `config.env`; keep it private):
 
@@ -372,15 +383,32 @@ the address, and `journalctl -u wpa_supplicant@wlan0` any errors. To change
 networks later, edit the config file (`wpa_passphrase "SSID" "pass"` makes the
 `network={}` block), then `sudo systemctl restart wpa_supplicant@wlan0`.
 
-**Signal.** The dongle sits under the Gateway's metal case, which weakens
-it. Where the signal is poor (seen at about -65 dBm with the receive rate
-down to 2 Mbit/s), the link drops every so often (`CTRL-EVENT-BEACON-LOSS`
-in `journalctl -u wpa_supplicant@wlan0`, "beacon loss" in
-`iw dev wlan0 station dump`). After such a drop `rtl8xxxu` can get stuck:
-every attempt to reconnect ends in "authentication with ... timed out", and
-only unplugging and replugging the dongle brings it back. For a gateway in
-a poor spot, use Ethernet, a short USB extension cable to get the dongle
-out from under the case, or a dongle with an external antenna.
+**Signal.** The TL-WN823N sits under the Gateway's metal case, which
+weakens it. Where the signal is poor (seen at about -65 dBm with the
+receive rate down to 2 Mbit/s), the link drops every so often
+(`CTRL-EVENT-BEACON-LOSS` in `journalctl -u wpa_supplicant@wlan0`, "beacon
+loss" in `iw dev wlan0 station dump`). After such a drop `rtl8xxxu` can get
+stuck: every attempt to reconnect ends in "authentication with ... timed
+out", and only unplugging and replugging the dongle brings it back.
+
+The fix is to replace the TL-WN823N with a TL-WN722N v1. In the same spot
+and on the same morning, the TL-WN823N had -56 to -64 dBm, a receive rate
+of 2 to 6.5 Mbit/s and 28 beacon losses overnight; the TL-WN722N has -51
+to -54 dBm and 72 Mbit/s both ways, its maximum on a 20 MHz channel.
+Ethernet works too where a cable reaches the Gateway.
+
+NEP also offers a "BDG WiFi Booster" (CF-WR302S) for weak Wi-Fi: a
+plug-in repeater with an Ethernet port for the Gateway and its own
+antennas. It adds another access point to the home network; replacing the
+dongle is simpler.
+
+Cards made before 7 November 2026 lack the TL-WN722N's driver. Build the
+kernel again (`./build.sh kernel`), copy
+`work/kernel-install/lib/modules/<release>/kernel/net/{wireless,mac80211}`
+and `.../kernel/drivers/net/wireless` over the board's copies (as root), run
+`sudo depmod -a` and `sudo apt install firmware-ath9k-htc`, then reboot
+with the new dongle plugged in. (`mac80211` changes too, so the modules go
+together.)
 
 The kernel only trusts the upstream-signed copy of the Wi-Fi regulatory
 database, so the rootfs stage selects `/lib/firmware/regulatory.db-upstream`.

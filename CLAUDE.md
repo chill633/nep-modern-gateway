@@ -45,9 +45,10 @@ user documentation; this file is the working context.
 Everything works on the board ("Old", the production unit until 2026-11-06;
 see "Production moved to the New unit" below):
 U-Boot 2024.01 (own board port), Linux 6.12.115, trixie, watchdog, Ethernet,
-Wi-Fi (TL-WN823N, rtl8xxxu), NAND (read-only partitions, BCH strength 4 via
-`fsl,use-minimum-ecc`), display (Tianma TM043NBH02, RGB565 via
-patches/linux/0001), touch, beeper, RTC (holds UTC), spidev.
+Wi-Fi (TL-WN823N, rtl8xxxu; TL-WN722N, ath9k_htc, since 2026-11-07),
+NAND (read-only partitions, BCH strength 4 via `fsl,use-minimum-ecc`),
+display (Tianma TM043NBH02, RGB565 via patches/linux/0001), touch, beeper,
+RTC (holds UTC), spidev.
 
 NEP's gateway software runs unchanged from a copy of the factory rootfs in
 `/srv/zlg` (board-files/zlg/, README section 7): zlg-chroot.service plus
@@ -129,8 +130,9 @@ Problems found on the board, now fixed in the kit:
   page's auto-refresh never ran, forms read stale values) and .live() is
   gone; zlg-web-port converts them to .prop()/.val()/$(document).on().
 
-Panels 9 and 10 (one inverter) read 0 with status 8000: that
-inverter is physically unplugged, not a fault.
+Panels 9 and 10 (one inverter; 23 and 24 on the New unit, see "Production
+moved to the New unit") read 0 with status 8000: that inverter is
+physically unplugged, not a fault.
 
 ZLG's command-line PHP runs on Debian's PHP 8.4 too (zlg-chroot
 php84_setup): host /usr bind-mounted ro at /srv/zlg/m6g2c/host/usr, a
@@ -193,6 +195,11 @@ The user edits the README's wording; keep their decisions:
 - The serial console is output only (TX + GND); log in over SSH via
   Ethernet or Wi-Fi (5a). After section 7's setup, zlg-hmi owns tty1.
 - 5a Wi-Fi: the dongle goes in the USB-A port on the bottom of the Gateway.
+  Since 2026-11-07 (the user's decision): recommend replacing NEP's
+  TL-WN823N with a TL-WN722N v1 (AR9271), on a short USB-A extension
+  because it doesn't fit in the weatherproof housing. NEP's "BDG WiFi
+  Booster" (CF-WR302S, plug-in repeater with Ethernet) is mentioned but not
+  recommended (the user: poor solution, another AP on the home network).
 - Sections run in order: 5a Wi-Fi, 5b Display, 5c MI200E, 6, 7 NEP software
   with its one subsection 7a web interface (it was briefly 7b; subsections
   are lettered from a, as 4a under 4), 8 Layout, 9 What has been tested.
@@ -326,9 +333,10 @@ into production that evening, replacing the Old one; no readings until
 the inverters wake in the morning. Checked read-only after its boot: the
 gateway programs, web (port 80) and cron running, zlg-mqtt skipped
 (local-only), plc_id.conf lists the same 24 modules (0x33xxxxxx ...
-0x33xxxxxx; panels 9/10 are the unplugged inverter), comm_device=0,
-plc_module=1, /dev/ttymxc1, utcoffset -18000, local weather.
-First live readings on that unit still to be confirmed. The Old unit
+0x33xxxxxx), comm_device=0, plc_module=1, /dev/ttymxc1, utcoffset -18000,
+local weather.
+Live readings confirmed on 2026-11-07 (07:44): 22 modules producing,
+the gateway's total (0_status "now") is their sum. The Old unit
 (192.168.1.183, NEP-xxxxx) is now free for tests (e.g. the ttymxc1
 logging pass-through or the plc_set -m scan); its misetup must still
 never write inverter settings. Since the switch the Old unit is off the
@@ -345,8 +353,44 @@ save is off. Other boot warnings are harmless (unclean journal after the
 move, mi200e -ENXIO, iwconfig wext, networkd "Could not set hostname").
 Options given: Ethernet (eth0 is configured, cable unplugged), a USB
 extension or a dongle with an antenna, or a kit service that resets the
-dongle when it can't reconnect. The user will fix the signal on
-2026-11-07; the reset service was not wanted for now.
+dongle when it can't reconnect. The reset service was not wanted.
+
+Module IDs and panel numbers: each inverter reports two module IDs (M_ID
+on the display), identical except the last hex digit, which is the
+inverter's input port (0 or 1). Panel numbers follow plc_id.conf's order
+and differ per unit: the unplugged inverter is panels 9/10 on the Old
+unit and 23/24 on the New unit. Within a pair the order isn't always
+port 0 first (the New unit's 1/2, 3/4, 5/6 are port 1, port 0). Refer to
+modules by M_ID; keep the IDs themselves out of the repository.
+
+## TL-WN722N (AR9271) on the New unit (2026-11-07)
+
+The New unit now uses a TP-Link TL-WN722N (v1: Atheros AR9271, 0cf3:9271,
+external antenna) instead of the TL-WN823N. Kit changes: m6g2c.config
+enables CONFIG_WLAN_VENDOR_ATH + CONFIG_ATH9K_HTC=m, with ATH9K and ATH10K
+off (imx_v6_v7_defconfig turns ath10k on once the vendor menu is on);
+ATH9K_HTC selects MAC80211_LEDS, so mac80211.ko changes too (built-in
+code doesn't; only the embedded /proc/config.gz). 03-rootfs.sh installs
+firmware-ath9k-htc (Debian main, open-source htc_9271-1.4.0.fw), not
+firmware-atheros. The fragment check passed (196 settings).
+Same spot, same morning: TL-WN823N -56 to -64 dBm, rx 2-6.5 Mbit/s, ping
+avg 35-37 ms, 28 beacon losses overnight; TL-WN722N -51 to -54 dBm, rx/tx
+72.2 Mbit/s (MCS 7, its maximum), ping avg 16 ms, 0 beacon losses in the
+first minutes. The router kept 192.168.1.239 for the new MAC. The AR9271's
+EEPROM says CN; the AP's country IE (US) takes over. README 5a recommends
+it (see "README" above); a longer check of beacon losses is still useful.
+On the board only the wireless modules were replaced (cfg80211, mac80211,
+drivers/net/wireless from work/kernel-install; kernel unchanged, still
+config without ath9k in /proc/config.gz); old ones in
+/root/modules-backup-20261107/wifi-old.tgz. The next SD image carries
+both. Both dongles work on the new modules; the TL-WN823N is the spare.
+Lessons: reloading the Wi-Fi modules needs `systemctl restart
+wpa_supplicant@wlan0` afterwards (the old process keeps a stale nl80211
+handle: CTRL-EVENT-SCAN-FAILED ret=-2, never connects; a USB replug
+restarts it by itself); /tmp is cleared at boot; work/linux-* was
+root-owned after `sudo ./build.sh all` (the user chowned it back).
+Tell the user up front which physical steps (dongle swaps) are theirs and
+when, before anything that takes the board off the network.
 
 ## Vendor security report (2026-11-06)
 
