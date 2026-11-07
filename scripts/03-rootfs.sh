@@ -121,7 +121,7 @@ PACKAGES=(
 	procps psmisc fdisk e2fsprogs cloud-guest-utils
 	mtd-utils can-utils i2c-tools usbutils u-boot-tools libubootenv-tool util-linux-extra
 	libpam-systemd systemd-resolved systemd-timesyncd
-	wpasupplicant iw wireless-regdb firmware-realtek
+	wpasupplicant iw wireless-regdb firmware-realtek firmware-ath9k-htc
 	firmware-misc-nonfree
 )
 # shellcheck disable=SC2206
