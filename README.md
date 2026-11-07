@@ -743,6 +743,9 @@ trixie image:**
   inverter readings aren't confirmed yet: it went in after dark. The
   inverter link is the same serial PLC module and the same `gateway-plc`
   set-up as on the 20210303 gateway, where it works.
+* Wi-Fi at its production spot is weak (about -65 dBm, 2 Mbit/s receive
+  rate); the link dropped twice on the first evening and the dongle had to
+  be replugged each time (section 5a, "Signal").
 
 The rest of this section is the 20210303 gateway's test record, which
 covers the shared parts (U-Boot, kernel, hardware).
