@@ -34,7 +34,8 @@
  *  - home/info, home/show (a database demo), maildebug and
  *    report/send are
  *    not reachable
- *  - files encrypted with php_screw (controllers/proxy.php) can't run on PHP 8 and are left out
+ *  - files encrypted with php_screw (controllers/proxy.php) can't run on
+ *    PHP 8 and are left out
  */
 
 $opt = getopt('', ['src:', 'deps:', 'web:', 'out:', 'check', 'no-lint']);

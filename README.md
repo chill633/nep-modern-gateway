@@ -15,10 +15,11 @@ The web interface now runs on Debian's **lighttpd** and **PHP 8.4**, kept
 patched by `apt`: NEP's pages were converted from CodeIgniter 2 to
 **CodeIgniter 3**, and their JavaScript moved to Debian's **jQuery 3** and
 **jQuery UI**, with **Highcharts 13** for the charts. NEP's own command-line
-PHP scripts run on PHP 8.4 too. Along the way, two features that had stopped working were restored: the **weather**, whose
-Yahoo service closed in 2019, now comes from Open-Meteo for the gateway's
-location, and the **map** on the Weather page, which showed a broken Google
-Maps image, now shows OpenStreetMap.
+PHP scripts run on PHP 8.4 too. Along the way, two features that had
+stopped working were restored: the **weather**, whose Yahoo service closed
+in 2019, now comes from Open-Meteo for the gateway's location, and the
+**map** on the Weather page, which showed a broken Google Maps image, now
+shows OpenStreetMap.
 
 ## The build kit
 
@@ -597,9 +598,10 @@ systemctl list-units 'zlg*'
   it drops the cron jobs that upload to it (`my_nsync` -> `php remote`,
   nepviewer.com, and newer firmware's `critical_alert.php`) and doesn't
   start `gateway-mqtt-nep`, newer firmware's MQTT link to
-  `broker.nepviewer.com`. That also stops NEP's cloud client from installing NEP's updates. Data collection,
-  the reports and the local web pages carry on; the pages' per-inverter
-  status files come from `gdata.sh` -> `lsync` -> `php proxy`, which is local.
+  `broker.nepviewer.com`. That also stops NEP's cloud client from
+  installing NEP's updates. Data collection, the reports and the local web
+  pages carry on; the pages' per-inverter status files come from `gdata.sh`
+  -> `lsync` -> `php proxy`, which is local.
 * **What the gateway connects to,** with local-only mode on: Open-Meteo once
   an hour for the weather (`api.open-meteo.com`, HTTPS), Debian's time
   servers (`systemd-timesyncd`), Debian's package servers only when `apt`
@@ -624,8 +626,9 @@ systemctl list-units 'zlg*'
 
 ### 7a. The web interface on Debian's lighttpd and PHP 8.4
 
-ZLG's web server (lighttpd + PHP 5.4.12 from 2013, `zlg-httpd`) is no longer maintained. `board-files/zlg/web/` replaces it with Debian's lighttpd and
-PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
+ZLG's web server (lighttpd + PHP 5.4.12 from 2013, `zlg-httpd`) is no
+longer maintained. `board-files/zlg/web/` replaces it with Debian's lighttpd
+and PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
 
 * `zlg-web-port` converts NEP's app on the board, from the copy in
   `/srv/zlg` into `/srv/zlg/www` (NEP's code is never part of this kit):
@@ -636,9 +639,9 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   (NEP's asked Google's Static Maps API without a key: a broken image), the
   status page's weather line back on, PHP 8 fixes (null-safe `count()` and friends, zeros instead
   of a failed page while `gateway-plc` restarts). It leaves out
-  `controllers/proxy.php` (encrypted with `php_screw`, PHP 5 only), a dead `status2.php`, and makes
-  `home/info`, `home/show`, `maildebug` and `report/send` unreachable, in any
-  capitalisation.
+  `controllers/proxy.php` (encrypted with `php_screw`, PHP 5 only) and a
+  dead `status2.php`, and makes `home/info`, `home/show`, `maildebug` and
+  `report/send` unreachable, in any capitalisation.
 * `zlg-web-fpm` runs PHP 8.4 chrooted into `/srv/zlg` as `www-data`, with the
   shifted clock (`zlg-time.so`, which now also covers Debian 13's 64-bit
   time calls). `zlg-web` is lighttpd in front of it.
@@ -646,7 +649,8 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
 * NEP's own copies of the replaced libraries (jQuery 1.6-1.9, jQuery UI 1.8
   and 1.9, Highcharts 2, simpletooltip, Modernizr, poshytip) are still in
   `nep/static/js/` but lighttpd refuses them (403), so no page can load them.
-* `misetup/` (the inverter grid-profile tool) is not served. ZLG's server, which serves it, is switched off.
+* `misetup/` (the inverter grid-profile tool) is not served. ZLG's server,
+  which serves it, is switched off.
   `misetup` reads and writes the microinverters' grid settings: one of 41
   country profiles (`misetup/setting/*.conf`; for the US `US-240`,
   `US-240-1547A` for IEEE 1547, `US-240-RULE21`, `US-HECO-240` and 208 V
