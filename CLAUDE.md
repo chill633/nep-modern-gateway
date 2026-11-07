@@ -317,10 +317,14 @@ dongle when it can't reconnect. The user will fix the signal on
 ## Vendor security report (2026-11-06)
 
 The user plans to report NEP's vulnerabilities to the vendor. The report
-is local only: ~/Working/NEP-BDG-256-security-report.md (outside the
-public repository; never commit it). It covers firmware 20230903 only (the
-user: reporting the old firmware would just get "update"), with no serials,
-IDs or location, and states that it is static analysis only. The findings are only in the report.
+and its findings are local only: ~/Working/NEP-BDG-256-security-report.md
+(outside the public repository). Until NEP has been told and has had time
+to respond, keep the findings out of everything committed (files and
+commit messages); read the local report for the details. It covers
+firmware 20230903 only (the user: reporting the old firmware would just
+get "update"), with no serials, IDs or location, and states that it is
+static analysis only. Never quote NEP's credentials anywhere.
+The kit's gateways are not exposed to the findings that matter (details in the local report).
 
 ## Repository and access
 
