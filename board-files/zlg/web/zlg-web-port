@@ -26,6 +26,8 @@
  *  - count(), sort(), implode(), in_array(), array_sum(), shmop_read() in
  *    NEP's code -> zlg_ versions with PHP 5 behaviour for null/false
  *    arguments
+ *  - a bare word as an array subscript (NEP's $pos[y], which broke saving
+ *    the panel layout) -> a quoted key, as PHP 5 treated it
  *  - jQuery 1.8.2 / jQuery UI 1.9.0 / blockUI 2.39 -> Debian's jQuery 3 and
  *    jQuery UI 1.13 (patched by apt), jQuery Migrate, blockUI 2.70;
  *    Highcharts 2.3.3 -> 13; simpletooltip -> jQuery UI's tooltip;
@@ -88,6 +90,57 @@ function compat_calls(string $code): string
 				$out .= "zlg_$f";
 				stat_add("calls: $f()");
 				continue;
+			}
+		}
+		$out .= is_array($tok) ? $tok[1] : $tok;
+	}
+	return $out;
+}
+
+/* A bare word used as an array subscript, like NEP's $pos[y], was an undefined
+ * constant in PHP 5/7 (a notice, then the literal string) but is a fatal Error
+ * in PHP 8, so the write it guards never runs. Quote such keys. Skipped inside
+ * interpolated strings, where "$a[b]" must keep the bare key, and for
+ * true/false/null, which keep their meaning as array keys. php -l can't catch
+ * this: it is a run-time error, not a parse error. */
+function quote_bareword_keys(string $code): string
+{
+	$t = token_get_all($code);
+	$n = count($t);
+	$sig = function ($i, $dir) use ($t, $n) {	/* next significant index */
+		for ($i += $dir; $i >= 0 && $i < $n; $i += $dir)
+			if (!is_array($t[$i]) || !in_array($t[$i][0],
+			    [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true))
+				return $i;
+		return -1;
+	};
+	$instr = false;		/* inside "..." or `...` (lone-quote tokens) */
+	$heredoc = false;
+	$out = '';
+	for ($i = 0; $i < $n; $i++) {
+		$tok = $t[$i];
+		if ($tok === '"' || $tok === '`')
+			$instr = !$instr;
+		elseif (is_array($tok) && $tok[0] === T_START_HEREDOC)
+			$heredoc = true;
+		elseif (is_array($tok) && $tok[0] === T_END_HEREDOC)
+			$heredoc = false;
+		elseif (!$instr && !$heredoc && is_array($tok) &&
+		    $tok[0] === T_STRING &&
+		    !in_array(strtolower($tok[1]), ['true', 'false', 'null'], true)) {
+			$pi = $sig($i, -1);
+			$ni = $sig($i, 1);
+			if ($pi >= 0 && $t[$pi] === '[' && $ni >= 0 && $t[$ni] === ']') {
+				$bi = $sig($pi, -1);	/* token before the '[' */
+				$bt = $bi >= 0 ? (is_array($t[$bi]) ? $t[$bi][0]
+						  : $t[$bi]) : null;
+				if (in_array($bt, [T_VARIABLE, T_STRING], true) ||
+				    $t[$bi] === ']' || $t[$bi] === ')' ||
+				    $t[$bi] === '}') {
+					$out .= "'" . $tok[1] . "'";
+					stat_add('bareword array key quoted');
+					continue;
+				}
 			}
 		}
 		$out .= is_array($tok) ? $tok[1] : $tok;
@@ -358,7 +411,7 @@ foreach (['controllers', 'models', 'libraries', 'views'] as $d) {
 		if (str_contains($f, '/views/errors/'))
 			continue;
 		$code = file_get_contents($f);
-		$new = compat_calls($code);
+		$new = quote_bareword_keys(compat_calls($code));
 		if ($d === 'views')
 			$new = view_edits($new);
 		else

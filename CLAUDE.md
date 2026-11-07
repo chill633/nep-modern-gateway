@@ -59,6 +59,10 @@ board-files/zlg/web/ (README 7a): zlg-web-port (PHP, runs on the board)
 converts /srv/zlg/root/Gateway/nep -> /srv/zlg/www (CI 2.1.3 -> 3.1.13 with
 CI3's config files + NEP's settings, Ucfirst controllers, tokenizer-based
 count()/implode()/sort()/shmop_read() -> zlg_ compat functions,
+bareword array subscripts ($pos[y]) -> quoted keys (quote_bareword_keys;
+skips string interpolation, heredocs and true/false/null; NEP's uncaught
+Status::spos() fatal on PHP 8 was why Manage Layout never saved panel
+positions, and php -l can't catch a run-time-only error),
 #[AllowDynamicProperties], jQuery 3 + Migrate, blockUI 2.70). zlg-web-fpm
 (chroot /srv/zlg, www-data, zlg-time.so preloaded) + zlg-web (lighttpd,
 port ZLG_WEB_PORT, 8080 until install-web.sh --switch). Deps pinned in
