@@ -8,7 +8,8 @@ user documentation; this file is the working context.
 
 ## State (2026-11-05)
 
-Everything works on the board ("Old", the production unit):
+Everything works on the board ("Old", the production unit until 2026-11-06;
+see "Production moved to the New unit" below):
 U-Boot 2024.01 (own board port), Linux 6.12.115, trixie, watchdog, Ethernet,
 Wi-Fi (TL-WN823N, rtl8xxxu), NAND (read-only partitions, BCH strength 4 via
 `fsl,use-minimum-ecc`), display (Tianma TM043NBH02, RGB565 via
@@ -47,7 +48,7 @@ on (`ZLG_LOCAL_ONLY=1`, no cloud uploads).
   gateway-plc; per-inverter boxes come from nep/static/local/<n>_status,
   written by `gdata.sh -> /opt/lsync -> php proxy` (local, every 4 min).
   Cloud upload is only `my_nsync -> php remote` (nepviewer.com).
-- "Old" (production) runs an older NEP version than "New" (no
+- "Old" (20210303) runs an older NEP version than "New" (no
   gateway-mqtt-nep; local web enabled; `gateway-pctrl` runs once with
   check_interval=0). Services skip programs a version lacks (ExecCondition).
 
@@ -145,7 +146,7 @@ The user edits the README's wording; keep their decisions:
   paragraphs open it (old ZLG system -> Debian 13 / Linux 6.12 / U-Boot
   2024.01; lighttpd + PHP 8.4, CI3, jQuery 3, Highcharts 13; misetup taken
   off the network; weather and map restored), then "## The build kit".
-- Tested state is described as done: the production unit needs no
+- Tested state is described as done: the Old unit needs no
   re-checking; section 4's factory-dump steps are only for other units or
   carriers; section 9 lists what was tested and what wasn't (MI200E, ENET1,
   CAN, UART7/8, ADC, WPA3-only Wi-Fi). Don't reintroduce "confirm/verify
@@ -164,7 +165,7 @@ The user edits the README's wording; keep their decisions:
   Script comments and zlg-chroot's error message say "README section 7";
   03-rootfs.sh's comment says "7a". The board's installed copies are
   current (installed after the renumbering).
-- 7a: with the same NEP version as the production unit ("Old"), run
+- 7a: with the same NEP version as the branch's gateway, run
   install-web.sh --switch right away; compare on port 8080 only for a
   different NEP version.
 
@@ -204,8 +205,9 @@ all 0; the recipient would come from /opt/config/general (`email`), which
 doesn't exist; gene.sh only builds the reports via curl to /nep/report/*
 and sets /tmp marker files that nothing reads (NEP's send.sh /
 send_alert_*.sh cron lines are commented out in ginit.sh).
-/opt/config/email holds NEP's factory mail settings, not the user's. The New unit wasn't
-checked. The report controller's send() uses smtp_host from that file.
+/opt/config/email holds NEP's factory mail settings, not the user's. The New unit is the
+same (checked 2026-11-06: report all 0, no general file, send lines
+commented out in ginit.sh). The report controller's send() uses smtp_host from that file.
 
 zlg-web-port blocks (routes to status) home/info, home/show,
 maildebug and report/send; README section 7 lists them, the outbound connections and the
@@ -279,8 +281,23 @@ was run and the copies were deleted.
 - 20230903 adds custom profiles (save_as_custom_conf.php,
   set_para_profile.php, para_profile.txt), mi_set_code and mi_repeat_set.
 - The inverters' current profile is unknown; finding it needs a read
-  (mod 1), which stops gateway-plc on the Old unit for the duration. Not
+  (mod 1), which stops gateway-plc on that unit for the duration (the New unit is
+  in production now; its misetup is the one that handles the 800B). Not
   done; needs the user's approval.
+
+## Production moved to the New unit (2026-11-06)
+
+The user put the New unit (firmware 20230903, NEP-yyyyy, 192.168.1.239)
+into production that evening, replacing the Old one; no readings until
+the inverters wake in the morning. Checked read-only after its boot: the
+gateway programs, web (port 80) and cron running, zlg-mqtt skipped
+(local-only), plc_id.conf lists the same 24 modules (0x33xxxxxx ...
+0x33xxxxxx; panels 9/10 are the unplugged inverter), comm_device=0,
+plc_module=1, /dev/ttymxc1, utcoffset -18000, local weather.
+First live readings on that unit still to be confirmed. The Old unit
+(192.168.1.183, NEP-xxxxx) is now free for tests (e.g. the ttymxc1
+logging pass-through or the plc_set -m scan); its misetup must still
+never write inverter settings.
 
 ## Repository and access
 
@@ -289,7 +306,7 @@ was run and the copies were deleted.
   installed and logged in.
 - Branches per NEP firmware major version (`major=` under [version] in
   /root/Gateway/gateway.cfg): **nep-fw-20210303** (default; the "Old"
-  production unit, minor 03, local web interface works; renamed from
+  unit, minor 03, local web interface works; renamed from
   claude/m6g2c-trixie-kit) and **nep-fw-20230903** (the "New" unit; NEP
   hides its local web interface, which the kit brings back). The New unit
   runs nep-fw-20230903 since 2026-11-06: SD system debian@192.168.1.239,
@@ -313,9 +330,9 @@ was run and the copies were deleted.
   test record, and section 9's line about the shared parts running on the
   other gateway (nep-fw-20210303 points to the 20230903 branch's README;
   nep-fw-20230903 points to the start of its own section 9), and section
-  7's "Email reports" bullet (nep-fw-20210303: off on the production unit;
-  nep-fw-20230903: off on the 20210303 gateway, not checked on the 20230903
-  one). When merging nep-fw-20210303 into nep-fw-20230903,
+  the Status note's and section 9's description of which gateway is in
+  production. Section 7's "Email reports" bullet says "off on both
+  gateways" on both branches. When merging nep-fw-20210303 into nep-fw-20230903,
   keep nep-fw-20230903's wording there (the top note conflicted once,
   2026-11-06), and check that board-files/zlg/nep-firmware still says
   20230903.
@@ -340,8 +357,9 @@ was run and the copies were deleted.
 
 - Hardware access: over SSH with the passwords the user gives per session,
   or the user runs commands and pastes output. The serial console is
-  output only (TX not connected). Never stop the Old unit's services for
-  tests that would interrupt its readings (it is in production).
+  output only (TX not connected). Never stop the production unit's
+  services for tests that would interrupt its readings: since 2026-11-06
+  that is the New unit (debian@192.168.1.239, NEP-yyyyy), not the Old one.
 - Board: `debian@192.168.1.183` on Wi-Fi, hostname **NEP-xxxxx** (since
   2026-11-06; was m6g2c). zlg-chroot's set_hostname names the board
   `NEP-<last 5 characters of SN=>` from /srv/zlg/root/Gateway/sn (serial

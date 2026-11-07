@@ -46,14 +46,15 @@ tree, and a **Debian 13 "trixie" armhf** root filesystem.
 > the pages (its boot script renames the front pages to `.bak`) and adds two
 > links to its cloud, which local-only mode cuts. The kit brings the pages
 > back. It runs on a second gateway with firmware 20230903 (the "New" unit),
-> with the web interface on port 80; that branch's README has its test
-> record.
+> with the web interface on port 80; since 6 November 2026 that gateway is
+> the one in production. That branch's README has its test record.
 
-> **Status:** this image runs in production on the EPC-M6G2C it was
-> developed on, together with NEP's gateway software and the modernised web
-> interface (section 7). The hardware and the software have been tested on
-> that unit and work; see section 9 for exactly what was checked. Nothing
-> needs re-checking there. The checks in section 4 are for a different
+> **Status:** this image ran in production on the EPC-M6G2C it was
+> developed on (the "Old" unit, firmware 20210303), together with NEP's
+> gateway software and the modernised web interface (section 7), until the
+> 20230903 gateway replaced it on 6 November 2026. The hardware and the
+> software have been tested on that unit and work; see section 9 for
+> exactly what was checked. Nothing needs re-checking there. The checks in section 4 are for a different
 > unit or carrier board.
 
 ```
@@ -499,7 +500,7 @@ original programs unchanged, from a copy of the factory root filesystem in
 | `zlg-pctrl` | `gateway-pctrl` | `/usr/local/bin/gateway` |
 | `zlg-mqtt` | `gateway-mqtt-nep` (NEP's cloud) | `/usr/local/bin/gateway`, `plc.sh` |
 | `zlg-hmi` | `gateway-hmi -qws` (touch screen, takes over `tty1`) | `/usr/local/bin/gateway`, `plc.sh` |
-| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 7a; off on the production unit) | `rcS` |
+| `zlg-httpd` | ZLG's lighttpd + PHP 5.4, port 80 (replaced by section 7a; off on both gateways) | `rcS` |
 | `zlg-cron` | ZLG's crontab (uploads, reports, the 01:00 daily clean) | `ginit.sh` |
 
 Each is restarted 10 s after it stops, which replaces `plc.sh`'s checks.
@@ -568,8 +569,8 @@ systemctl list-units 'zlg*'
   network. The map on the Weather page is loaded by your browser from
   OpenStreetMap, not by the gateway. NEP's own programs are closed source;
   no connection from them to the outside has been seen.
-* **Email reports** are NEP's, built hourly by `gene.sh`, and are off on the
-  production unit: the report switches in `/opt/config/report` are all
+* **Email reports** are NEP's, built hourly by `gene.sh`, and are off on
+  both gateways: the report switches in `/opt/config/report` are all
   `0`, no recipient is set (`/opt/config/general`), and the jobs that would
   send them are commented out in NEP's `ginit.sh`. `/opt/config/email`
   holds NEP's own factory mail settings, not
@@ -609,7 +610,7 @@ PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   `nep/static/js/` but lighttpd refuses them (403), so no page can load them.
 * `misetup/` (the inverter grid-profile tool) is not served. ZLG's server, which serves it, is switched off.
 
-This is installed and running on port 80 on the production unit. The steps
+This is installed and running on port 80 on the 20210303 gateway. The steps
 below are for a fresh install or an update. Fetch the open-source parts on
 the PC (the rootfs stage does it too), then copy the kit to the board:
 
@@ -640,7 +641,7 @@ A fresh install starts the new server on port 8080, next to ZLG's on port
 80. `sudo sh /usr/local/share/zlg/web/install-web.sh --switch` moves it to
 port 80 and stops ZLG's; `--revert` goes back.
 
-* **Same NEP version as the production unit** (the "Old" version, without
+* **Same NEP version as this branch's gateway** (20210303, without
   `gateway-mqtt-nep`): the port has been verified page by page against
   ZLG's server, so run `--switch` right after installing; there is nothing
   to compare.
@@ -698,8 +699,8 @@ tools/                      factory hardware dump, pinctrl decoder, DCD/DDR deco
 
 ## 9. What has been tested
 
-**On the EPC-M6G2C this kit was developed on (the production unit), running
-the trixie image:**
+**On the EPC-M6G2C this kit was developed on (the "Old" unit, firmware
+20210303, in production until 6 November 2026), running the trixie image:**
 
 * Boot: U-Boot 2024.01 (this kit's board port) and Linux 6.12.115 from the
   SD card, with the external hardware watchdog fed from power-on (section
