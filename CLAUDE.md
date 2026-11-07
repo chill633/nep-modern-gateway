@@ -416,22 +416,28 @@ CLAUDE.md, zlg-web-port and four commit messages reworded) and
 force-pushed; the kit's mitigations are described without saying why
 (misetup not served, diagnostic/test pages routed to status, local-only).
 The pre-rewrite history is in ~/Working/nep-modern-gateway-backup-20261107.git
-(local only, never push it). Old commit IDs may still open on GitHub until
-GitHub Support purges them. Writing new docs: say what the kit does, not
-which weakness of NEP's it closes, and describe none of the report's
-findings, not even indirectly.
+(local only, never push it). To drop the old commits GitHub still served
+by ID, the user had the repository deleted and recreated the same day
+(same name, description, settings; both branches pushed, default
+nep-fw-20210303); the old IDs now give 404. Never push from a clone made
+before 2026-11-07 (it carries the old history). Writing new docs: say what
+the kit does, not which weakness of NEP's it closes, and describe none of
+the report's findings, not even indirectly.
 
 ## Repository and access
 
-- GitHub: chill633/nep-modern-gateway (**public**; renamed from
-  chill633/claude, which redirects). Keep identifying details out of
+- GitHub: chill633/nep-modern-gateway (**public**; recreated 2026-11-07,
+  see "Disclosure policy"; the old name chill633/claude no longer
+  redirects). Keep identifying details out of
   everything committed (files and commit messages): gateway serial numbers
   and the real hostnames (NEP- + the serial's last five characters; the
   docs say NEP-xxxxx for the Old unit, NEP-yyyyy for the New one), inverter
   IDs, the user's location or coordinates, passwords, Wi-Fi details. On
   2026-11-06 they were removed from both branches' history (filter-branch,
-  force-pushed). Use the IP addresses to reach the boards. Local checkout: ~/Working/nep-modern-gateway. gh is
-  installed and logged in.
+  force-pushed). Use the IP addresses to reach the boards. Local
+  checkout: ~/Working/nep-modern-gateway. gh is installed and logged in
+  (delete_repo scope added 2026-11-07 for the recreate; the user may
+  remove it).
 - Branches per NEP firmware major version (`major=` under [version] in
   /root/Gateway/gateway.cfg): **nep-fw-20210303** (default; the "Old"
   unit, minor 03, local web interface works; renamed from
