@@ -277,6 +277,44 @@ Read from the binaries and scripts only; nothing was run.
   with comm_device=0 via `plc_set -p 00000 -z -c 0001...b0...` (on) or
   `...01...` (off). Nothing runs it; never run it.
 
+## misetup: inverter grid settings (2026-11-06)
+
+Read from both units' copies (nep/misetup: HTML/JS + proxy.cgi); nothing
+was run and the copies were deleted.
+- misetup is the page that reads and writes the microinverters' grid
+  settings. proxy.cgi (not served by the
+  new web server) takes mod/pwd/ind/cmd and runs `plc_set -j -p PWD -i
+  IDX -c HEX`. mod: 1 read, 2 write, 3 count inverters, 4 "Setup Mode"
+  (kills gateway-plc: the modem serves one program; readings stop), 5
+  reboot, 6 reload the list. Extended (1547 advanced) values go through
+  proxy.js mread_extend/mwrite_extend.
+- setting/*.conf: 41 grid profiles, US ones US-240, US-240-1547A,
+  US-240-RULE21, US-HECO-240 plus 208 V variants. Fields: fre/fref
+  (50/60 Hz; Japan-50Hz and Japan-60Hz differ only in these and the
+  frequency limits), grid code, voltage trips (smaxv, maxv, maxv2/maxtv2,
+  maxv3/maxtv3, minv3/mintv3, minv2/mintv2, minv, sminv), frequency trips
+  (smaxf ... sminf with times), pwr, rect, and for 1547/Rule 21 db_offset,
+  pwrf_ctrl, vwat_ctrl, wvar_p*q*, vvar_offset_v1-v4, vvar_q1q2,
+  vvar_ctrl, ac_ref, vnorm, ramp_delay, temperature_max.
+- Command: 34 bytes starting 00 01; byte 7 grid, 8 power, 10 minv, 11
+  maxv, 13 maxv2, 15 maxv3, 16 minf, 17 maxf, 18/19 suppress, 24-25 maxv
+  clearing times, 30 sminv, 31 smaxv. Voltage byte = |V - MID_V_200| *
+  ac_v_gain / 4 (other divisors for some grids); ac_v_gain from plc.conf
+  AC_V_Gain* (Old unit: 17.468, 17.447, 33.65, 17.447, 39.05, 39.05,
+  14.89); power byte = pwr / power_gain (2, 4, 20 or 40).
+- The model comes from the inverter ID's first two hex digits. The user's
+  inverters start with 33 = 800B in the 20230903 misetup (ac_v_gains[3],
+  power_gain 4). **The Old unit's (20210303) misetup has no 33 case**: it
+  falls back to ac_v_gain 1.0 and power_gain 2, so a write from it would
+  encode the voltage trips ~17x too low (tripping a 240 V grid) and the
+  power limit doubled. Never write settings with the Old unit's misetup;
+  the 20230903 copy handles the 800B.
+- 20230903 adds custom profiles (save_as_custom_conf.php,
+  set_para_profile.php, para_profile.txt), mi_set_code and mi_repeat_set.
+- The inverters' current profile is unknown; finding it needs a read
+  (mod 1), which stops gateway-plc on the Old unit for the duration. Not
+  done; needs the user's approval.
+
 ## Repository and access
 
 - GitHub: chill633/nep-modern-gateway (private; renamed from chill633/claude,
