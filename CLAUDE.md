@@ -328,10 +328,16 @@ was run and the copies were deleted.
   the 20230903 copy handles the 800B.
 - 20230903 adds custom profiles (save_as_custom_conf.php,
   set_para_profile.php, para_profile.txt), mi_set_code and mi_repeat_set.
-- The inverters' current profile is unknown; finding it needs a read
-  (mod 1), which stops gateway-plc on that unit for the duration (the New unit is
-  in production now; its misetup is the one that handles the 800B). Not
-  done; needs the user's approval.
+- Baseline read on 2026-11-08 (user approved) through the kit's Advanced
+  page on the New unit: all 24 modules, basic (0001) and extended (0002),
+  raw replies in ~/Working/nep-local/mi-baseline-20261108.txt and
+  /var/lib/zlg-admin/ on the board (they contain module IDs: never commit).
+  Modules 23/24 reply all zeros (the unplugged inverter); 3-22 identical;
+  1/2 (one inverter) differ in reply bytes 15, 19 and 39. NEP's decoder
+  shows grid 6 (1547.1 240/120V) with odd values (VAC_MIN_2 -18.0 V,
+  VAC_MIN 26.0 V, frequency limits 45.6-74.4 Hz, wider than the
+  US-240-1547A file's 57-62 Hz): not yet understood; work it out before
+  any write. Replies echo the module ID in bytes 4-7 and 10-13.
 
 ## Production moved to the New unit (2026-11-06)
 
@@ -346,8 +352,9 @@ Live readings confirmed on 2026-11-07 (07:44): 22 modules producing,
 the gateway's total (0_status "now") is their sum. The Old unit
 (192.168.1.183, NEP-xxxxx) is now free for tests (e.g. the ttymxc1
 logging pass-through or the plc_set -m scan); its misetup must still
-never write inverter settings. Since the switch the Old unit is off the
-network (no route to 192.168.1.183).
+never write inverter settings. Since 2026-11-07 it is on the bench booted
+from its factory NAND system (firmware 20210303, kernel 4.1.15, hostname
+Gateway) at 192.168.1.241, user root; no inverters attached.
 
 Wi-Fi at the New unit's production spot (2026-11-06, log read only): the
 link is weak (-64 to -68 dBm, rx bitrate 2 Mbit/s, repeated
@@ -398,6 +405,63 @@ restarts it by itself); /tmp is cleared at boot; work/linux-* was
 root-owned after `sudo ./build.sh all` (the user chowned it back).
 Tell the user up front which physical steps (dongle swaps) are theirs and
 when, before anything that takes the board off the network.
+
+## Settings pages: Wi-Fi, Modules, Advanced (2026-11-08)
+
+The user's plan (Claude Docs "NEP Modernization - Gateway Config Pages"):
+port NEP's separate config pages into the menu after Weather. Done and
+tested on the New unit (.239); README 7a "Settings pages" documents them.
+- NEP's originals (identical in both firmwares except misetup):
+  /wifi (own password, default "gateway", MD5 in vtwifi/wlan.pwd; edits
+  vtwifi/wpa.conf, which Debian ignores), /module (singular; no login;
+  plc_id.conf + plc_phase.conf), /misetup. The kit serves none of them.
+- board-files/zlg/web/admin/zlg-admin: root helper (PHP CLI) behind
+  zlg-admin.socket (/run/zlg/admin.sock = /m6g2c/run/admin.sock in the
+  chroot, group www-data, Accept=yes -> zlg-admin@.service, one JSON line
+  each way). It checks every request itself: settings password
+  (password_hash in /var/lib/zlg-admin/password; missing = "gateway"),
+  tokens (sha256, 2 h idle, /run/zlg-admin), 5 failures / 5 min.
+  CI3 pages (web/app: Access, Wifi, Modules, Advanced controllers,
+  Zlg_admin library with per-session CSRF token, views/zlg) are copied in
+  by zlg-web-port after NEP's code; menu entries + lang keys too.
+- Wi-Fi: writes /etc/wpa_supplicant/wpa_supplicant-wlan0.conf (WPA2: derived
+  psk only) and /etc/systemd/network/25-wireless.network, via a transient
+  systemd-run job; 90 s connect test (wpa_state COMPLETED, IPv4, router
+  answers ping), else restore and retry. Pending marker
+  /var/lib/zlg-admin/wifi-pending + zlg-wifi-guard.service (sysinit, before
+  wpa_supplicant) undo an unconfirmed change at boot. wpa_cli and iw are in
+  /usr/sbin (not in the debian user's PATH). Tested 2026-11-08: unchanged
+  save ~10 s; wrong passphrase rolled back after ~100 s; guard run by hand.
+- Modules: backups in /var/lib/zlg-admin/modules (last 10); after a save
+  zlg-admin touches /run/zlg/restart (zlg-restart.path -> zlg.target), which
+  clears the web sessions (CI session files are in the chroot's /tmp) and
+  NEP's ginit.sh deletes the *_status files until gdata.sh's next run (up to
+  4 min). End-to-end tested (module 25 FF000002 -> FF000003 -> back; file
+  byte-identical). ZLG_ADMIN_GW=<dir> (root CLI only) points modules.* at a
+  test copy without restarting.
+- Advanced = NEP's 20230903 misetup HTML/JS, built by zlg-web-port into
+  /srv/zlg/www/misetup-ui (jQuery 3 + Migrate, blockUI 2.70, Bootstrap
+  3.3.7 kept; js/proxy.js and common.js are symlinks to orig/ resolved via
+  the chroot prefix); index.html becomes views/zlg/misetup_ui.php (base
+  href, CSRF ajaxSetup, hidden pwd field, container-fluid) shown in an
+  iframe. URLs: proxy.cgi -> /nep/advanced/proxy (GET init; POST mod
+  1 read, 2 write, 3 find, 4 setup, 5 leave (NEP's "Reboot Gateway", label
+  changed, also in files()' language), 6 IDs), get_file.php -> files,
+  get_setting.php -> setting, save_as_custom_conf.php -> savecustom,
+  set_para_profile.php -> setprofile. Replies are text/plain (NEP evals).
+  Read = 0001/0002 + 64 zero hex digits (any other payload is a write).
+  Setup mode = systemctl stop zlg-plc + transient zlg-mi-resume-*.timer
+  (600 s, re-armed per request); killing gateway-plc alone doesn't work on
+  Debian (Restart=always, 10 s). NEP's page needs Setup Mode before Check.
+  PLC password: /var/lib/zlg-admin/mi-password (zlg-admin
+  --set-mi-password; set on the New unit). Writes: login + ZLG_MI_WRITES=1
+  (zlg.default: 0; not set on the board) + gateway.cfg major >= 20230903;
+  logged. Never enabled or tested yet. Other misetup versions (20210303 has
+  getfile.php/get_content.php) are skipped by the port; tested with the Old
+  unit's copy.
+- Browser checks: headless Firefox via /snap/bin/geckodriver and a small
+  WebDriver client (urllib), screenshots; sshpass is installed on the
+  workstation.
 
 ## Vendor security report (2026-11-06)
 

@@ -21,7 +21,10 @@ gateway's links to NEP's cloud, including that firmware's MQTT connection.
 Along the way, two features that had stopped working were restored: the
 **weather**, whose Yahoo service closed in 2019, now comes from Open-Meteo
 for the gateway's location, and the **map** on the Weather page, which
-showed a broken Google Maps image, now shows OpenStreetMap.
+showed a broken Google Maps image, now shows OpenStreetMap. The gateway's
+settings pages, which NEP served apart from the main pages (**Wi-Fi**, the
+**module** list and the inverters' grid settings, **MI Setup**), are now in
+the web interface's menu, behind a settings password.
 
 ## The build kit
 
@@ -379,8 +382,10 @@ gets an address by DHCP. Without the dongle the boot doesn't wait for it.
 
 On the board: `iw dev wlan0 link` shows the association, `ip addr show wlan0`
 the address, and `journalctl -u wpa_supplicant@wlan0` any errors. To change
-networks later, edit the config file (`wpa_passphrase "SSID" "pass"` makes the
-`network={}` block), then `sudo systemctl restart wpa_supplicant@wlan0`.
+networks later, use the web interface's **Wi-Fi** page (section 7a), which
+puts the previous settings back if the new ones don't connect. By hand: edit
+the config file (`wpa_passphrase "SSID" "pass"` makes the `network={}`
+block), then `sudo systemctl restart wpa_supplicant@wlan0`.
 
 **Signal.** The TL-WN823N sits under the Gateway's metal case, which
 weakens it. Where the signal is poor (seen at about -65 dBm with the
@@ -651,19 +656,9 @@ and PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
 * NEP's own copies of the replaced libraries (jQuery 1.6-1.9, jQuery UI 1.8
   and 1.9, Highcharts 2, simpletooltip, Modernizr, poshytip) are still in
   `nep/static/js/` but lighttpd refuses them (403), so no page can load them.
-* `misetup/` (the inverter grid-profile tool) is not served. ZLG's server,
-  which serves it, is switched off.
-  `misetup` reads and writes the microinverters' grid settings: one of 41
-  country profiles (`misetup/setting/*.conf`; for the US `US-240`,
-  `US-240-1547A` for IEEE 1547, `US-240-RULE21`, `US-HECO-240` and 208 V
-  versions), which sets 50 or 60 Hz, the voltage and frequency trip limits
-  and clearing times, the power limit, the reconnect time and, for 1547 and
-  Rule 21, the volt-var, volt-watt and ramp functions. It stops
-  `gateway-plc` while it works ("Setup Mode"). **Don't write settings with
-  firmware 20210303's `misetup` to 800B inverters (IDs starting `33`):** it
-  doesn't know that model and would encode the voltage trips about 17
-  times too low and the power limit doubled. Firmware 20230903's `misetup`
-  handles the 800B.
+* NEP's separate settings pages (`/wifi`, `/module`, `/misetup`) aren't
+  served; the kit's own versions are in the menu (below). ZLG's server,
+  which served NEP's, is switched off.
 
 This is installed and running on port 80 on the 20230903 gateway. The steps
 below are for a fresh install or an update. Fetch the open-source parts on
@@ -733,6 +728,55 @@ The weather shows on the status page (the bar above the inverter boxes) and
 on the Info page (**Weather** in the menu, `http://<board>/nep/info/index`),
 together with a map of the same location.
 
+**Settings pages.** After Weather, the menu has the gateway's settings,
+which NEP served as separate pages. Anyone on the network can view them;
+changes need the settings password, `gateway` at first, changed on any of
+the three pages (`sudo zlg-admin --reset-password` sets it back). The work
+is done by `zlg-admin`, a helper running as root outside `/srv/zlg`, which
+checks every request itself; the pages reach it over a socket
+(`zlg-admin.socket`, `/run/zlg/admin.sock`).
+
+* **Wi-Fi** (`/nep/wifi`): the connection (network, access point, signal,
+  bit rate, address) and its settings: the network name, with a search for
+  networks in range; WPA2-Personal, WPA3-Personal or open; an address from
+  the router (DHCP) or a fixed one. A change is tested for 90 seconds: if
+  the gateway can't connect, the previous settings come back by themselves.
+  If the power goes during the test, `zlg-wifi-guard` puts them back at the
+  next boot. Tested: an unchanged save reconnects in about 10 seconds; a
+  wrong Wi-Fi password is undone after 90 seconds.
+* **Modules** (`/nep/modules`): the inverter and meter IDs the gateway
+  polls (`plc_id.conf`), in panel order: 1 to 8 hex digits, or a whole
+  serial number such as `21508-0005F123-U`. Saving keeps the last 10 lists
+  in `/var/lib/zlg-admin/modules` and restarts the gateway software, as
+  NEP's own "reboot" does: about a minute without readings, and the web
+  pages log you out. The phase column of three-phase systems isn't shown.
+* **Advanced** (`/nep/advanced`): NEP's MI Setup page from firmware
+  20230903, which reads and writes the inverters' grid settings: one of
+  NEP's country profiles (`misetup/setting/*.conf`; for the US `US-240`,
+  `US-240-1547A` for IEEE 1547, `US-240-RULE21`, `US-HECO-240` and 208 V
+  versions) or custom ones, which set 50 or 60 Hz, the voltage and
+  frequency trip limits and clearing times, the power limit, the reconnect
+  time and, for 1547 and Rule 21, the volt-var, volt-watt and ramp
+  functions. The page and what it reads and writes are NEP's code; its
+  server side (NEP's `proxy.cgi` and PHP files) is `zlg-admin`.
+  * **Setup Mode** stops `gateway-plc` (the PLC module serves one program),
+    so there are no readings until **Leave Setup Mode** (NEP's "Reboot
+    Gateway" button) or 10 minutes without a request. The inverters answer
+    only while they produce. **Check** reads the selected modules.
+  * The PLC password NEP's page asks for is kept on the board: set it once
+    with `sudo zlg-admin --set-mi-password` (it reads the value from its
+    input); `install-web.sh` reminds you while it isn't set.
+  * **Set** (writing) is off: it needs `ZLG_MI_WRITES=1` in
+    `/etc/default/zlg`, the settings password and firmware 20230903 or
+    later. Writes are logged (`journalctl -t zlg-admin`,
+    `/var/lib/zlg-admin/mi-writes.log`). Wrong values can make the
+    inverters disconnect from the grid or run outside what the utility
+    allows; read every module first and keep the replies as a baseline.
+  * Only firmware 20230903's MI Setup is built. **Firmware 20210303's
+    doesn't know the 800B inverters (IDs starting `33`)**: it would encode
+    the voltage trips about 17 times too low and the power limit doubled.
+    On other firmware versions the Advanced page says it isn't available.
+
 ## 8. Layout
 
 ```
@@ -778,6 +822,18 @@ trixie image:**
   the dongle had to be replugged each time. Since 7 November it uses a
   TL-WN722N v1 (`ath9k_htc`) on a USB extension cable: about -52 dBm and
   72 Mbit/s (section 5a, "Signal").
+* The settings pages (section 7a), on 8 November 2026:
+  * Wi-Fi: viewing, login, the network search and the input checks. An
+    unchanged save reconnected in about 10 seconds with the files
+    byte-identical; a wrong Wi-Fi password was undone after 90 seconds;
+    `zlg-wifi-guard` undid a pending change when run by hand.
+  * Modules: one ID changed and changed back through the page, each save
+    followed by the gateway software's restart and readings resuming; the
+    file was byte-identical to the original afterwards.
+  * Advanced: NEP's MI Setup page loads and decodes reads of every module
+    through `zlg-admin`, with replies identical to `plc_set`'s; the
+    readings resume on **Leave Setup Mode**. Writing hasn't been switched
+    on or tried.
 
 The rest of this section is the 20210303 gateway's test record, which
 covers the shared parts (U-Boot, kernel, hardware).
@@ -807,7 +863,8 @@ covers the shared parts (U-Boot, kernel, hardware).
   matches this kit"; the board's hostname became `NEP-xxxxx`.
 * The shared parts (U-Boot, kernel, Debian, the ZLG set-up, the web
   interface) also run on the gateway with firmware 20230903; its test
-  record is at the start of this section.
+  record is at the start of this section. This unit's firmware has no
+  Advanced page (section 7a).
 
 **Not tested, because this unit doesn't use them:** the MI200E power-line
 modems (this unit uses the serial PLC module; its MI200E modems fail their

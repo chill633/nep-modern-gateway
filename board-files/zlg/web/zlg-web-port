@@ -38,8 +38,10 @@
  *    not reachable
  *  - files encrypted with php_screw (controllers/proxy.php) can't run on
  *    PHP 8 and are left out
- *  - this kit's settings pages (app/: Wi-Fi, Modules), linked in the menu after
- *    Weather; NEP's own copies (/root/Gateway/wifi, ...) aren't served
+ *  - this kit's settings pages (app/: Wi-Fi, Modules, Advanced), linked in
+ *    the menu after Weather; NEP's own copies (/root/Gateway/wifi, ...)
+ *    aren't served. Advanced shows NEP's MI Setup page (misetup, built into
+ *    /misetup-ui) with its proxy.cgi and PHP files replaced by the kit's
  */
 
 $opt = getopt('', ['src:', 'deps:', 'web:', 'out:', 'check', 'no-lint']);
@@ -197,7 +199,8 @@ function view_edits(string $v): string
 		'~(<li><a href="[^"]*info/page/"[^>]*>.*?lang_navi_Layout.*?</a></li>)~'
 			=> '$1' . "\n" . '              <li><a href="<?php echo base_url();?>info/index" title=""><?php echo lang(\'lang_navi_Weather\');?></a></li>' .
 			   "\n" . '              <li><a href="<?php echo base_url();?>wifi" title=""><?php echo lang(\'lang_navi_Wifi\');?></a></li>' .
-			   "\n" . '              <li><a href="<?php echo base_url();?>modules" title=""><?php echo lang(\'lang_navi_Modules\');?></a></li>',
+			   "\n" . '              <li><a href="<?php echo base_url();?>modules" title=""><?php echo lang(\'lang_navi_Modules\');?></a></li>' .
+			   "\n" . '              <li><a href="<?php echo base_url();?>advanced" title=""><?php echo lang(\'lang_navi_Advanced\');?></a></li>',
 		/* the Info page's weather labels were English only; NEP's
 		   language files have them (and lang_weather_map_today, below) */
 		'~<h2>Weather information</h2>~' => "<h2><?php echo lang('lang_weather_map_weatherinfo');?></h2>",
@@ -383,11 +386,12 @@ foreach (['controllers', 'models', 'libraries'] as $d) {
    which NEP's files don't have; added after related entries, keeping each
    file's line endings */
 $newlang = [
-	'english'  => ['lang_navi_Weather' => 'Weather', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => 'Modules', 'lang_weather_map_today' => 'Today'],
-	'japanese' => ['lang_navi_Weather' => '天気', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => 'モジュール', 'lang_weather_map_today' => '今日'],
-	'chinese'  => ['lang_navi_Weather' => '天气', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => '模块', 'lang_weather_map_today' => '今天'],
+	'english'  => ['lang_navi_Weather' => 'Weather', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => 'Modules', 'lang_navi_Advanced' => 'Advanced', 'lang_weather_map_today' => 'Today'],
+	'japanese' => ['lang_navi_Weather' => '天気', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => 'モジュール', 'lang_navi_Advanced' => '詳細設定', 'lang_weather_map_today' => '今日'],
+	'chinese'  => ['lang_navi_Weather' => '天气', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => '模块', 'lang_navi_Advanced' => '高级设置', 'lang_weather_map_today' => '今天'],
 ];
 $after = ['lang_navi_Weather' => 'lang_navi_Layout', 'lang_navi_Wifi' => 'lang_navi_Weather', 'lang_navi_Modules' => 'lang_navi_Wifi',
+	  'lang_navi_Advanced' => 'lang_navi_Modules',
 	  'lang_weather_map_today' => 'lang_weather_map_weatherinfo'];
 foreach ($newlang as $l => $keys) {
 	$f = "$A/language/$l/nep_lang.php";
@@ -434,6 +438,89 @@ foreach (['controllers', 'libraries', 'views'] as $d) {
 		continue;
 	copy_tree("$web/app/$d", "$A/$d");
 	stat_add("kit pages: $d");
+}
+
+/* NEP's MI Setup page (misetup) for the Advanced page: its HTML becomes a
+   view (with the form token), its JS/CSS are served from /misetup-ui, and
+   its calls go to this kit's Advanced controller instead of NEP's proxy.cgi
+   and PHP files. What it reads and writes stays NEP's code. Only firmware
+   20230903's version is built (it knows the 800B inverters; 20210303's
+   doesn't and has other files): others are skipped and the Advanced page
+   says so. */
+$mi = dirname($src) . '/misetup';
+$chroot = str_ends_with($src, '/root/Gateway/nep') ? substr($src, 0, -strlen('/root/Gateway/nep')) : '';
+$mi_ok = is_file("$mi/index.html") && is_file("$mi/js/_mi.js") && is_file("$mi/get_setting.php");
+if (!$mi_ok)
+	stat_add('misetup: skipped (not firmware 20230903\'s version)');
+try {
+if ($mi_ok) {
+	$ui = "$tmp/misetup-ui";
+	/* NEP links js/proxy.js and js/common.js to a variant (orig/, us_old/) */
+	$real = function ($f) use ($chroot) {
+		for ($i = 0; $i < 8 && is_link($f); $i++) {
+			$t = readlink($f);
+			$f = str_starts_with($t, '/') ? $chroot . $t : dirname($f) . "/$t";
+		}
+		return $f;
+	};
+	foreach (['css', 'fonts'] as $d)
+		copy_tree("$mi/$d", "$ui/$d");
+	$urls = [
+		'proxy.cgi?' => '/nep/advanced/proxy?',
+		'"get_file.php"' => '"/nep/advanced/files"',
+		'"get_setting.php"' => '"/nep/advanced/setting"',
+		'save_as_custom_conf.php?' => '/nep/advanced/savecustom?',
+		'set_para_profile.php?' => '/nep/advanced/setprofile?',
+		/* "Reboot Gateway" leaves setup mode here (gateway-plc starts) */
+		'alert("Please refresh your browser after 20 seconds.");' => '',
+		'"Are you sure to reboot Gateway?"' => '"Leave setup mode and resume the readings?"',
+		'"Reboot Aborted."' => '"Cancelled."',
+		'"Try to Reboot Gateway...<br>"' => '"Leaving setup mode: readings resume.<br>"',
+	];
+	$seen = [];
+	foreach (['proxy.js', 'common.js', '_mi.js', 'bootstrap.js', 'npm.js'] as $j) {
+		$f = $real("$mi/js/$j");
+		is_file($f) || throw new RuntimeException("js/$j missing");
+		$code = file_get_contents($f);
+		foreach ($urls as $from => $to) {
+			$code = str_replace($from, $to, $code, $c);
+			$seen[$from] = ($seen[$from] ?? 0) + $c;
+		}
+		put("$ui/js/$j", $code);
+	}
+	foreach (['proxy.cgi?', '"get_file.php"', '"get_setting.php"', 'save_as_custom_conf.php?', 'set_para_profile.php?'] as $k)
+		$seen[$k] || throw new RuntimeException("no $k in its JS");
+	copy("$mi/language.json", "$ui/language.json");
+
+	$html = file_get_contents("$mi/index.html");
+	$html = str_replace('<?', "<?php echo '<?'; ?>", $html);
+	$js = fn($u) => '<script type="text/javascript" src="' . $u . '"></script>';
+	$edits = [
+		'~<head>~' => "<head>\n    <base href=\"/misetup-ui/\">",
+		/* NEP's jQuery 2.2.4 and blockUI -> the ones the other pages use */
+		'~<script[^>]*src="js/jquery\.js"[^>]*>\s*</script>~' =>
+			$js('/javascript/jquery/jquery.min.js') . "\n    " . $js('/zlg-web/js/jquery-migrate.min.js') .
+			"\n    <script type=\"text/javascript\">$.ajaxSetup({ headers: { \"X-Csrf-Token\": \"<?php echo htmlspecialchars(\$csrf, ENT_QUOTES); ?>\" } });</script>",
+		'~<script[^>]*src="js/blockUI\.js"[^>]*>\s*</script>~' => $js('/zlg-web/js/jquery.blockUI.js'),
+		/* the PLC password comes from the gateway (zlg-admin) */
+		'~<label for="pwd">[^<]*</label>\s*<input type="password"[^>]*id="pwd"[^>]*>~' =>
+			'<input type="hidden" id="pwd" name="pwd" value="gateway">',
+		'~(id="btnreboot"[^>]*>)Reboot Gateway<~' => '$1Leave Setup Mode<',
+		/* Bootstrap's fixed 970 px container is wider than the frame */
+		'~<div class="container">~' => '<div class="container-fluid">',
+	];
+	foreach ($edits as $re => $to) {
+		$html = preg_replace($re, $to, $html, 1, $c);
+		$c || throw new RuntimeException("index.html: $re not found");
+	}
+	put("$A/views/zlg/misetup_ui.php", "<?php defined('BASEPATH') OR exit('No direct script access allowed'); ?>\n" . $html);
+	stat_add('misetup: built /misetup-ui');
+}
+} catch (RuntimeException $e) {
+	/* a version this port doesn't know: no Advanced page, rest as usual */
+	rm_tree("$tmp/misetup-ui");
+	@unlink("$A/views/zlg/misetup_ui.php");
+	stat_add('misetup: skipped (' . $e->getMessage() . ')');
 }
 
 /* config: NEP's settings on CI3's files */

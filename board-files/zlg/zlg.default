@@ -26,3 +26,8 @@ ZLG_WEATHER=1
 # 1: the board's hostname becomes "NEP-" and the last five characters of the
 # gateway's serial number (/root/Gateway/sn), e.g. NEP-xxxxx; 0: keep it
 ZLG_HOSTNAME=1
+
+# The Advanced page (NEP's MI Setup) can write grid settings to the
+# inverters only with ZLG_MI_WRITES=1 (and the settings password); reading
+# them works either way.
+ZLG_MI_WRITES=0
