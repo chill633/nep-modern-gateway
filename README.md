@@ -800,7 +800,7 @@ checks every request itself; the pages reach it over a socket
     from the last 5 minutes, stops `gateway-plc` while it runs, checks the
     result by reading back (up to 3 tries) and logs like a write.
   * **Generate Grid Report** (needs the settings password) reads every
-    module's settings (about 5 seconds per module, no readings meanwhile;
+    module's settings (about 10 seconds per module, no readings meanwhile;
     `gateway-plc` starts again afterwards) and offers a `.tgz` with a CSV
     (a row per module: every setting and the raw replies) and a PDF
     (modules with the same settings grouped, then the raw replies). The
