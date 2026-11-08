@@ -407,6 +407,17 @@ was run and the copies were deleted.
   (they differ in the temperature offset, 3 control flags, watt-PF Q);
   unticked groups are sent as 00 (probably "unchanged", unproven: leave
   Temperature MAX and Control Flag unticked, compare the read-back).
+  From the user: Temperature MAX is the inverter's over-temperature
+  shutdown in deg C, not a grid value, and the user doesn't use it (stored
+  byte 0x32: 70 C by the 2021 offset +20, 90 C by the 2023 page's +40;
+  if the 2021 offset applies, the page writes 20 C below what is typed).
+  LVRT (control flag bit 0x04) = low-voltage ride-through; no vendor
+  documentation on what the toggle does or how it relates to the UV
+  settings. The inverters now have flags 01 (GFDI on, LVRT off); NEP's
+  US custom profiles (Alliant, BCHydro, Connexus, LUMA, MISO, PNM,
+  US-120V; all grid 6) set flag_ctrl=4 (LVRT on, GFDI off) and use
+  288/120 V, which the 800B's 2021 encoding can't hold: they were
+  presumably made for inverters that use the 2023 encoding.
   Building it found a bug, fixed: the voltage range check compared the raw
   value, so the printed limits 278.5/161.5 V were refused; it now checks
   the encoded byte (1-255). Nothing written yet; waiting for the utility.
