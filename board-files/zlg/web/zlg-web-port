@@ -443,10 +443,17 @@ foreach (['controllers', 'libraries', 'views'] as $d) {
 /* NEP's MI Setup page (misetup) for the Advanced page: its HTML becomes a
    view (with the form token), its JS/CSS are served from /misetup-ui, and
    its calls go to this kit's Advanced controller instead of NEP's proxy.cgi
-   and PHP files. What it reads and writes stays NEP's code. */
+   and PHP files. What it reads and writes stays NEP's code. Only firmware
+   20230903's version is built (it knows the 800B inverters; 20210303's
+   doesn't and has other files): others are skipped and the Advanced page
+   says so. */
 $mi = dirname($src) . '/misetup';
 $chroot = str_ends_with($src, '/root/Gateway/nep') ? substr($src, 0, -strlen('/root/Gateway/nep')) : '';
-if (is_file("$mi/index.html") && is_file("$mi/js/_mi.js")) {
+$mi_ok = is_file("$mi/index.html") && is_file("$mi/js/_mi.js") && is_file("$mi/get_setting.php");
+if (!$mi_ok)
+	stat_add('misetup: skipped (not firmware 20230903\'s version)');
+try {
+if ($mi_ok) {
 	$ui = "$tmp/misetup-ui";
 	/* NEP links js/proxy.js and js/common.js to a variant (orig/, us_old/) */
 	$real = function ($f) use ($chroot) {
@@ -473,7 +480,7 @@ if (is_file("$mi/index.html") && is_file("$mi/js/_mi.js")) {
 	$seen = [];
 	foreach (['proxy.js', 'common.js', '_mi.js', 'bootstrap.js', 'npm.js'] as $j) {
 		$f = $real("$mi/js/$j");
-		is_file($f) || fail("misetup: js/$j missing");
+		is_file($f) || throw new RuntimeException("js/$j missing");
 		$code = file_get_contents($f);
 		foreach ($urls as $from => $to) {
 			$code = str_replace($from, $to, $code, $c);
@@ -482,7 +489,7 @@ if (is_file("$mi/index.html") && is_file("$mi/js/_mi.js")) {
 		put("$ui/js/$j", $code);
 	}
 	foreach (['proxy.cgi?', '"get_file.php"', '"get_setting.php"', 'save_as_custom_conf.php?', 'set_para_profile.php?'] as $k)
-		$seen[$k] || fail("misetup: no $k in its JS (a different NEP version?)");
+		$seen[$k] || throw new RuntimeException("no $k in its JS");
 	copy("$mi/language.json", "$ui/language.json");
 
 	$html = file_get_contents("$mi/index.html");
@@ -504,12 +511,16 @@ if (is_file("$mi/index.html") && is_file("$mi/js/_mi.js")) {
 	];
 	foreach ($edits as $re => $to) {
 		$html = preg_replace($re, $to, $html, 1, $c);
-		$c || fail("misetup: index.html: $re not found");
+		$c || throw new RuntimeException("index.html: $re not found");
 	}
 	put("$A/views/zlg/misetup_ui.php", "<?php defined('BASEPATH') OR exit('No direct script access allowed'); ?>\n" . $html);
 	stat_add('misetup: built /misetup-ui');
-} else {
-	stat_add('misetup: not in this NEP version');
+}
+} catch (RuntimeException $e) {
+	/* a version this port doesn't know: no Advanced page, rest as usual */
+	rm_tree("$tmp/misetup-ui");
+	@unlink("$A/views/zlg/misetup_ui.php");
+	stat_add('misetup: skipped (' . $e->getMessage() . ')');
 }
 
 /* config: NEP's settings on CI3's files */

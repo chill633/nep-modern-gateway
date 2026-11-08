@@ -773,6 +773,11 @@ function op_mi_cmd(array $req): array
 	$isread = preg_match('/^000[12]0{64}$/', $cmd) === 1;
 	if ($write && !$isread) {
 		need_token($req);
+		/* firmware 20210303's MI Setup encodes the 800B's settings wrongly;
+		   only 20230903's page is built (zlg-web-port), and only it writes */
+		$fw = mi_ini(gw() . '/gateway.cfg');
+		(int)($fw['major'] ?? 0) >= 20230903 || return_reply(['type' => '0', 'data' =>
+			'Writing settings needs NEP firmware 20230903 or later on this gateway.']);
 		mi_writes_on() || return_reply(['type' => '0', 'data' =>
 			'Writing settings is switched off on this gateway (ZLG_MI_WRITES in /etc/default/zlg).']);
 	} elseif (!$isread) {

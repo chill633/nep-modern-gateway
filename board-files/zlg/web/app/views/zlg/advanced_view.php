@@ -2,7 +2,8 @@
 <div class="zlg-page">
 <h2>Advanced: inverter grid settings</h2>
 <?php if (!$built): ?>
-  <div class="zlg-msg err">NEP's MI Setup page isn't in this gateway's software copy (/root/Gateway/misetup).</div>
+  <div class="zlg-msg err">Not available on this gateway: the Advanced page uses the MI Setup page of NEP's
+    firmware 20230903, and this gateway's software is another version.</div>
 <?php else: ?>
 <div class="zlg-box">
   This is NEP's MI Setup page. It reads the grid settings of the inverters (voltage and frequency trip
