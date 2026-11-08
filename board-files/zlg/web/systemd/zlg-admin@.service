@@ -1,0 +1,11 @@
+[Unit]
+Description=ZLG gateway: settings helper for the web interface (one request)
+
+[Service]
+# one JSON request on the connection, one reply (zlg-admin)
+ExecStart=/usr/local/sbin/zlg-admin
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+TimeoutStartSec=60
+RuntimeMaxSec=60

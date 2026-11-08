@@ -38,6 +38,8 @@
  *    not reachable
  *  - files encrypted with php_screw (controllers/proxy.php) can't run on
  *    PHP 8 and are left out
+ *  - this kit's settings pages (app/: Wi-Fi, Modules), linked in the menu after
+ *    Weather; NEP's own copies (/root/Gateway/wifi, ...) aren't served
  */
 
 $opt = getopt('', ['src:', 'deps:', 'web:', 'out:', 'check', 'no-lint']);
@@ -190,9 +192,12 @@ function view_edits(string $v): string
 			=> '$1<span id="wt"></span>$2',
 		'~/\*\s*uw\(\);\s*\*/~' => 'uw(); setInterval(uw, 1800000);',
 		/* a "Weather" menu entry for the Info page (weather and map),
-		   which NEP's menu doesn't link to */
+		   which NEP's menu doesn't link to, then this kit's settings
+		   pages (app/) */
 		'~(<li><a href="[^"]*info/page/"[^>]*>.*?lang_navi_Layout.*?</a></li>)~'
-			=> '$1' . "\n" . '              <li><a href="<?php echo base_url();?>info/index" title=""><?php echo lang(\'lang_navi_Weather\');?></a></li>',
+			=> '$1' . "\n" . '              <li><a href="<?php echo base_url();?>info/index" title=""><?php echo lang(\'lang_navi_Weather\');?></a></li>' .
+			   "\n" . '              <li><a href="<?php echo base_url();?>wifi" title=""><?php echo lang(\'lang_navi_Wifi\');?></a></li>' .
+			   "\n" . '              <li><a href="<?php echo base_url();?>modules" title=""><?php echo lang(\'lang_navi_Modules\');?></a></li>',
 		/* the Info page's weather labels were English only; NEP's
 		   language files have them (and lang_weather_map_today, below) */
 		'~<h2>Weather information</h2>~' => "<h2><?php echo lang('lang_weather_map_weatherinfo');?></h2>",
@@ -378,11 +383,12 @@ foreach (['controllers', 'models', 'libraries'] as $d) {
    which NEP's files don't have; added after related entries, keeping each
    file's line endings */
 $newlang = [
-	'english'  => ['lang_navi_Weather' => 'Weather', 'lang_weather_map_today' => 'Today'],
-	'japanese' => ['lang_navi_Weather' => '天気', 'lang_weather_map_today' => '今日'],
-	'chinese'  => ['lang_navi_Weather' => '天气', 'lang_weather_map_today' => '今天'],
+	'english'  => ['lang_navi_Weather' => 'Weather', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => 'Modules', 'lang_weather_map_today' => 'Today'],
+	'japanese' => ['lang_navi_Weather' => '天気', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => 'モジュール', 'lang_weather_map_today' => '今日'],
+	'chinese'  => ['lang_navi_Weather' => '天气', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => '模块', 'lang_weather_map_today' => '今天'],
 ];
-$after = ['lang_navi_Weather' => 'lang_navi_Layout', 'lang_weather_map_today' => 'lang_weather_map_weatherinfo'];
+$after = ['lang_navi_Weather' => 'lang_navi_Layout', 'lang_navi_Wifi' => 'lang_navi_Weather', 'lang_navi_Modules' => 'lang_navi_Wifi',
+	  'lang_weather_map_today' => 'lang_weather_map_weatherinfo'];
 foreach ($newlang as $l => $keys) {
 	$f = "$A/language/$l/nep_lang.php";
 	if (!is_file($f))
@@ -419,6 +425,15 @@ foreach (['controllers', 'models', 'libraries', 'views'] as $d) {
 		if ($new !== $code)
 			put($f, $new);
 	}
+}
+
+/* this kit's settings pages (controllers, libraries, views/zlg), after the
+   conversion of NEP's code above: they are written for PHP 8 already */
+foreach (['controllers', 'libraries', 'views'] as $d) {
+	if (!is_dir("$web/app/$d"))
+		continue;
+	copy_tree("$web/app/$d", "$A/$d");
+	stat_add("kit pages: $d");
 }
 
 /* config: NEP's settings on CI3's files */
