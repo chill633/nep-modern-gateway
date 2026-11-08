@@ -426,6 +426,10 @@ tested on the New unit (.239); README 7a "Settings pages" documents them.
   CI3 pages (web/app: Access, Wifi, Modules, Advanced controllers,
   Zlg_admin library with per-session CSRF token, views/zlg) are copied in
   by zlg-web-port after NEP's code; menu entries + lang keys too.
+  NEP's views leave one <div> open (#modindex_box) that footer_view closes
+  ("end of main content") before #main_container: the kit's pages open
+  <div class="zlg-main"> in views/zlg/account.php for that (#main_container
+  and #modindex_box have fixed heights, 400/620 px, so not reused).
 - Wi-Fi: writes /etc/wpa_supplicant/wpa_supplicant-wlan0.conf (WPA2: derived
   psk only) and /etc/systemd/network/25-wireless.network, via a transient
   systemd-run job; 90 s connect test (wpa_state COMPLETED, IPv4, router
