@@ -127,6 +127,31 @@ class Advanced extends CI_Controller {
 		$this->zlg_admin->json(['data' => $data, 'status' => 1]);
 	}
 
+	/* the grid report: read every module, then a .tgz with a CSV and a PDF */
+	public function report_start()
+	{
+		if (!$this->zlg_admin->csrf_ok())
+			return $this->zlg_admin->json(['ok' => false, 'error' => 'the page had expired; reload it'], 403);
+		$this->zlg_admin->json($this->zlg_admin->call('mi.report_start',
+			['freq' => (string)$this->input->post('freq')]));
+	}
+
+	public function report_status()
+	{
+		$this->zlg_admin->json($this->zlg_admin->call('mi.report_status'));
+	}
+
+	public function report_download()
+	{
+		$r = $this->zlg_admin->call('mi.report_get', ['id' => (string)$this->input->get('id')]);
+		if (empty($r['ok']) || !preg_match('/^[A-Za-z0-9._-]+\.tgz$/', $r['name'] ?? ''))
+			show_404();
+		$this->output->set_header('Cache-Control: no-store')
+			->set_header('Content-Disposition: attachment; filename="' . $r['name'] . '"')
+			->set_content_type('application/gzip')
+			->set_output(base64_decode($r['data']));
+	}
+
 	/* NEP's save_as_custom_conf.php and set_para_profile.php */
 	public function savecustom()
 	{

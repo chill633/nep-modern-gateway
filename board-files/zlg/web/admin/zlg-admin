@@ -19,6 +19,7 @@
  *                               confirmed (power lost while it was tested)
  *   zlg-admin --reset-password  set the settings password back to "gateway"
  *   zlg-admin --set-mi-password the PLC password for the Advanced page (stdin)
+ *   zlg-admin --mi-report-job   read all modules, write the grid report (systemd-run)
  */
 
 const STATE = '/var/lib/zlg-admin';	/* password, previous Wi-Fi files */
@@ -737,8 +738,16 @@ function op_mi_find(array $req): array
 	return ['reply' => ['cnt' => $pid === '' ? '0' : $pid, 'pid' => $pid]];
 }
 
+function mi_report_busy(): void
+{
+	$st = json_file(RUN . '/mi-report.json');
+	if (in_array($st['state'] ?? '', ['starting', 'reading'], true) && time() - ($st['time'] ?? 0) < 300)
+		return_reply(['type' => '0', 'data' => 'A grid report is being made; try again when it is done.']);
+}
+
 function op_mi_setup(array $req): array
 {
+	mi_report_busy();
 	$pid = mi_plc_pid();
 	run(['/usr/bin/systemctl', 'stop', 'zlg-plc.service']);
 	mi_keep_setup();
@@ -748,6 +757,7 @@ function op_mi_setup(array $req): array
 
 function op_mi_leave(array $req): array
 {
+	mi_report_busy();
 	run(['/usr/bin/systemctl', 'stop', 'zlg-mi-resume-*.timer']);
 	run(['/usr/bin/systemctl', 'start', 'zlg-plc.service']);
 	syslog(LOG_NOTICE, 'zlg-admin: MI setup mode ended: gateway-plc started');
@@ -764,6 +774,7 @@ function mi_writes_on(): bool
    or mod 2 (write) */
 function op_mi_cmd(array $req): array
 {
+	mi_report_busy();
 	$write = ($req['op'] ?? '') === 'mi.write';
 	$ind = (string)($req['ind'] ?? '');
 	$cmd = strtolower((string)($req['cmd'] ?? ''));
@@ -794,6 +805,156 @@ function op_mi_cmd(array $req): array
 	}
 	$r = json_decode($out, true);
 	return ['reply' => is_array($r) ? $r : ['type' => '0', 'data' => 'no answer from plc_set']];
+}
+
+/* one read, as plc_set's reply data ("62 37 ..."), or null */
+function mi_read(int $ind, string $cmd, int $tries = 3): ?string
+{
+	for ($i = 0; $i < $tries; $i++) {
+		$r = json_decode(trim(mi_chroot(['./plc_set', '-j', '-p', mi_pwd(), '-i', (string)$ind,
+						  '-c', $cmd . str_repeat('0', 64)])), true);
+		if (is_array($r) && ($r['type'] ?? '') === '10' && isset($r['data']) &&
+		    !preg_match('/^(00 ){44}$/', trim($r['data']) . ' '))
+			return trim($r['data']);
+	}
+	return null;
+}
+
+/* ---- the grid report (Advanced page) --------------------------------------
+ * A background job (systemd-run): every module's basic and extended
+ * settings, decoded as MI Setup does (mi-report.php), as a CSV and a PDF in
+ * one .tgz. Readings stop while it runs; gateway-plc is started again after
+ * if it was running before. */
+
+const MI_REPORT_LIB = '/usr/local/share/zlg/web/admin/mi-report.php';
+
+function mi_report_status(array $s): void
+{
+	$s['time'] = time();
+	put_atomic(RUN . '/mi-report.json', json_encode($s), 0600);
+}
+
+function op_mi_report_start(array $req): array
+{
+	$freq = (string)($req['freq'] ?? '60');
+	in_array($freq, ['50', '60'], true) || fail('the grid frequency is 50 or 60 Hz');
+	mi_pwd();
+	return with_lock('mireport', function () use ($freq) {
+		$st = json_file(RUN . '/mi-report.json');
+		if (in_array($st['state'] ?? '', ['starting', 'reading'], true) && time() - ($st['time'] ?? 0) < 300)
+			fail('a grid report is already being made');
+		$id = bin2hex(random_bytes(6));
+		mi_report_status(['id' => $id, 'state' => 'starting', 'freq' => $freq, 'done' => 0, 'total' => mi_modcnt()]);
+		run(['/usr/bin/systemd-run', '--quiet', '--collect', '--unit=zlg-mi-report-' . $id,
+		     '--property=Type=exec', '/usr/local/sbin/zlg-admin', '--mi-report-job'], $rc);
+		if ($rc !== 0) {
+			mi_report_status(['id' => $id, 'state' => 'failed', 'message' => 'could not start the report']);
+			fail('could not start the report');
+		}
+		return ['id' => $id];
+	});
+}
+
+function op_mi_report_status(array $req): array
+{
+	$st = json_file(RUN . '/mi-report.json');
+	unset($st['file']);
+	return ['report' => $st];
+}
+
+function op_mi_report_get(array $req): array
+{
+	$st = json_file(RUN . '/mi-report.json');
+	(($st['state'] ?? '') === 'done' && ($st['id'] ?? '') === (string)($req['id'] ?? '') &&
+	 is_file($st['file'] ?? '')) || fail('no such report');
+	return ['name' => $st['name'], 'data' => base64_encode((string)file_get_contents($st['file']))];
+}
+
+function mi_report_job(): void
+{
+	require MI_REPORT_LIB;
+	$tz = @readlink('/etc/localtime');
+	if ($tz && preg_match('~zoneinfo/(.+)$~', $tz, $m))
+		@date_default_timezone_set($m[1]);
+	$st = json_file(RUN . '/mi-report.json');
+	$id = $st['id'] ?? '';
+	$freq = (float)($st['freq'] ?? 60);
+	$ids = [];
+	foreach (plcid_parse((string)file_get_contents(gw() . '/plc_id.conf')) as $n => $v)
+		if ($n > 0 && plcid_value($v) !== '')
+			$ids[$n] = str_pad(plcid_value($v), 8, '0', STR_PAD_LEFT);
+	$total = count($ids);
+	$was_running = mi_plc_pid() !== '';
+	$raw = [];
+	try {
+		mi_report_status(['id' => $id, 'state' => 'reading', 'freq' => $st['freq'] ?? '60', 'done' => 0, 'total' => $total]);
+		run(['/usr/bin/systemctl', 'stop', 'zlg-plc.service']);
+		syslog(LOG_NOTICE, "zlg-admin: grid report: reading $total modules (gateway-plc stopped)");
+		$done = 0;
+		foreach ($ids as $n => $hex) {
+			mi_keep_setup();
+			if (str_starts_with($hex, 'FF'))	/* a meter, not an inverter */
+				$raw[$n] = ['skip' => 'meter'];
+			else
+				$raw[$n] = ['basic' => mi_read($n, '0001'), 'ext' => mi_read($n, '0002')];
+			mi_report_status(['id' => $id, 'state' => 'reading', 'freq' => $st['freq'] ?? '60',
+					  'done' => ++$done, 'total' => $total]);
+		}
+	} finally {
+		if ($was_running) {
+			run(['/usr/bin/systemctl', 'stop', 'zlg-mi-resume-*.timer']);
+			run(['/usr/bin/systemctl', 'start', 'zlg-plc.service']);
+		} else {
+			mi_keep_setup();
+		}
+	}
+
+	$plc = mi_ini(gw() . '/plc.conf');
+	$gains = [];
+	foreach (['', '_2', '_3', '_4', '_5', '_6', '_14'] as $sfx)
+		$gains[] = is_numeric($plc["AC_V_Gain$sfx"] ?? '') ? (float)$plc["AC_V_Gain$sfx"] : 0.0;
+	$offset = is_numeric($plc['reconn_time_offset'] ?? '') ? (float)$plc['reconn_time_offset'] : 0.0;
+	$mods = [];
+	$ok = $ext_ok = 0;
+	foreach ($ids as $n => $hex) {
+		$r = $raw[$n];
+		$model = mi_model($hex, $gains);
+		$b = mi_bytes($r['basic'] ?? null);
+		$e = mi_bytes($r['ext'] ?? null);
+		$basic = $b ? mi_decode_basic($b, $model, $freq, $offset) : [];
+		$ok += $b ? 1 : 0;
+		$ext_ok += $e ? 1 : 0;
+		$mods[] = [
+			'n' => $n, 'id' => $hex,
+			'basic_state' => isset($r['skip']) ? 'not read' : ($b ? 'ok' : 'no answer'),
+			'ext_state' => isset($r['skip']) ? 'meter' : ($e ? 'ok' : 'no answer'),
+			'basic' => $basic,
+			'old' => $b && in_array($basic['grid'] ?? 0, [6, 7], true) ? mi_decode_old($b, $model, $freq) : [],
+			'ext' => $e ? mi_decode_ext($e) : [],
+			'raw_basic' => $r['basic'] ?? null, 'raw_ext' => $r['ext'] ?? null,
+		];
+	}
+	$cfg = mi_ini(gw() . '/gateway.cfg');
+	$meta = ['time' => date('Y-m-d H:i T'), 'host' => gethostname(),
+		 'firmware' => ($cfg['major'] ?? '?') . ' minor ' . ($cfg['minor'] ?? '?'),
+		 'freq' => (string)(int)$freq, 'read_ok' => $ok, 'ext_ok' => $ext_ok];
+	$base = 'grid-report-' . preg_replace('/[^A-Za-z0-9-]/', '', gethostname()) . '-' . date('Ymd-Hi');
+	$dir = RUN . '/mi-report-work';
+	run(['/usr/bin/rm', '-rf', $dir]);
+	mkdir($dir, 0700);
+	file_put_contents("$dir/$base.csv", mi_report_csv($meta, $mods));
+	file_put_contents("$dir/$base.pdf", mi_report_pdf($meta, $mods));
+	chmod("$dir/$base.csv", 0644);
+	chmod("$dir/$base.pdf", 0644);
+	$tgz = RUN . '/mi-report.tgz';
+	@unlink($tgz);
+	run(['/usr/bin/tar', 'czf', $tgz, '-C', $dir, "$base.csv", "$base.pdf"], $rc);
+	run(['/usr/bin/rm', '-rf', $dir]);
+	$rc === 0 || fail('could not pack the report');
+	syslog(LOG_NOTICE, "zlg-admin: grid report $base made ($ok of $total modules answered)");
+	mi_report_status(['id' => $id, 'state' => 'done', 'name' => "$base.tgz", 'file' => $tgz,
+			  'done' => $total, 'total' => $total, 'read_ok' => $ok,
+			  'message' => "$ok of $total modules answered"]);
 }
 
 class Reply extends Exception { public $reply; }
@@ -868,6 +1029,9 @@ const OPS = [
 	'mi.list' => 'op_mi_list',
 	'mi.save_custom' => 'op_mi_save_custom',
 	'mi.set_profile' => 'op_mi_set_profile',
+	'mi.report_start' => 'op_mi_report_start',
+	'mi.report_status' => 'op_mi_report_status',
+	'mi.report_get' => 'op_mi_report_get',
 ];
 
 function serve(): void
@@ -914,6 +1078,15 @@ try {
 			$st = json_file(RUN . '/wifi-apply.json');
 			wifi_status(['id' => $st['id'] ?? '', 'state' => 'failed', 'ssid' => $st['ssid'] ?? '',
 				     'message' => $e->getMessage()]);
+			throw $e;
+		}
+		break;
+	case '--mi-report-job':
+		try {
+			mi_report_job();
+		} catch (Throwable $e) {
+			$st = json_file(RUN . '/mi-report.json');
+			mi_report_status(['id' => $st['id'] ?? '', 'state' => 'failed', 'message' => $e->getMessage()]);
 			throw $e;
 		}
 		break;
