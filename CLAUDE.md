@@ -421,6 +421,20 @@ was run and the copies were deleted.
   Building it found a bug, fixed: the voltage range check compared the raw
   value, so the printed limits 278.5/161.5 V were refused; it now checks
   the encoded byte (1-255). Nothing written yet; waiting for the utility.
+- Deviation permission (2026-11-08): the utility's support gave it by
+  phone; the user chose volt-var Q1 44 % / Q4 -44 % and asked Claude to do
+  the writes on 2026-11-09 (one inverter, modules 3/4, first; then 1/2 and
+  5-22; then ZLG_MI_WRITES=0 and a grid report as the record).
+- Rehearsal (2026-11-08, real Advanced page in headless Firefox, network
+  stubbed, Check replayed from the baseline): basic command as above for
+  modules 3 and 4; extended 0002000000000000c0000b0f15198c12001e2c000005
+  7f000909b255000000000000 (VAR-CTRL mode 4, V 95/99/105/109 %, V_Norm
+  240, Vref 102, ramp 30, Q1 44, Q2 0, OLRT 5; VOLT-WATT off; FREQ-WATT
+  on 0.036/0.036 Hz, 5/5 %, 5 s; temperature and flags 00). NEP bug:
+  proc_extend's reconvertvalue() unticks chk_vnorm after each module's
+  reply, so a range write sends V_Norm/Ramp only to the first module:
+  write extended settings one module at a time. A write with
+  ZLG_MI_WRITES=0 is refused before plc_set runs (tested by script).
 - Utility profile (local only: ~/Working/nep-local/grid-settings/, CFF v2.0
   -> NEP field mapping, names the utility, never commit): can't encode
   OV2 288 V, UV2 120 V, OF1/UF1 300 s, ES_V_LOW 220.08 V; NEP's volt-var
