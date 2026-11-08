@@ -327,7 +327,7 @@ was run and the copies were deleted.
 ## 800B 2021 encoding: test, page, calibration (2026-11-08)
 
 - One-inverter test (user approved, module 3; tool /tmp/mitest.php on .239,
-  gone after reboot): byte 0x46 in OV1 (cmd byte 15) = 236.05 V in the 2021
+  deleted 2026-11-08): byte 0x46 in OV1 (cmd byte 15) = 236.05 V in the 2021
   encoding tripped the inverter with error 0x40 (AC RMS over) at a 242 V
   grid. The 800B (IDs 33) use the 2021 encoding. Error codes are hex bit
   flags (BDG-256 manual 7.6: bit 4 freq over, bit 6 AC RMS over, bit 15
