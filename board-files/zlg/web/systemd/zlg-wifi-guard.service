@@ -1,0 +1,17 @@
+[Unit]
+Description=ZLG gateway: undo a Wi-Fi change that was never confirmed
+# a change made on the Wi-Fi settings page is tested for 90 seconds and
+# undone if it doesn't connect; if the power went during that test, the
+# previous settings come back here, before Wi-Fi starts
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target wpa_supplicant@wlan0.service systemd-networkd.service
+Wants=network-pre.target
+ConditionPathExists=/var/lib/zlg-admin/wifi-pending
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/zlg-admin --wifi-guard
+
+[Install]
+WantedBy=sysinit.target

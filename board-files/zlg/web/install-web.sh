@@ -86,11 +86,18 @@ install -m 644 lighttpd.conf /etc/zlg/lighttpd.conf
 install -m 644 php-fpm.conf /etc/zlg/php-fpm.conf
 install -m 644 systemd/zlg-web.service systemd/zlg-web-fpm.service /etc/systemd/system/
 grep -q '^ZLG_WEB_PORT=' /etc/default/zlg 2>/dev/null || set_port 8080
+# the settings pages' helper (root): Wi-Fi, Modules; viewing is open,
+# changes need the settings password (default "gateway")
+install -m 755 admin/zlg-admin /usr/local/sbin/zlg-admin
+install -m 644 systemd/zlg-admin.socket systemd/zlg-admin@.service \
+	systemd/zlg-wifi-guard.service /etc/systemd/system/
 
 echo "Converting NEP's web interface (zlg-web-port) ..."
 "$SHARE/zlg-web-port"
 
 systemctl daemon-reload
+systemctl enable zlg-wifi-guard.service
+systemctl enable --now zlg-admin.socket
 systemctl add-wants zlg.target zlg-web-fpm.service
 systemctl add-wants zlg.target zlg-web.service
 systemctl restart zlg-web-fpm.service zlg-web.service

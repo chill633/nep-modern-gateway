@@ -1,0 +1,598 @@
+#!/usr/bin/php8.4
+<?php
+/*
+ * zlg-admin: the privileged side of the web interface's settings pages
+ * (Wi-Fi, Modules). Runs as root outside /srv/zlg; the pages (PHP in
+ * zlg-web-fpm, www-data, chrooted) talk to it over a Unix socket:
+ *
+ *   zlg-admin.socket  /run/zlg/admin.sock (inside /srv/zlg: /m6g2c/run/admin.sock),
+ *                     group www-data; one zlg-admin@.service per connection,
+ *                     one JSON request line in, one JSON reply line out
+ *
+ * Viewing needs no login; every change needs a token from auth.login (the
+ * settings password, default "gateway"). Requests are checked here, not in
+ * the pages.
+ *
+ *   zlg-admin                   serve one request on stdin/stdout (the socket)
+ *   zlg-admin --wifi-apply-job  apply staged Wi-Fi settings (run by systemd-run)
+ *   zlg-admin --wifi-guard      at boot: undo a Wi-Fi change that was never
+ *                               confirmed (power lost while it was tested)
+ *   zlg-admin --reset-password  set the settings password back to "gateway"
+ */
+
+const STATE = '/var/lib/zlg-admin';	/* password, previous Wi-Fi files */
+const RUN = '/run/zlg-admin';		/* tokens, Wi-Fi apply status */
+const WPA_CONF = '/etc/wpa_supplicant/wpa_supplicant-wlan0.conf';
+const NET_CONF = '/etc/systemd/network/25-wireless.network';
+const IFACE = 'wlan0';
+const GW = '/srv/zlg/root/Gateway';
+const DEFAULT_PASSWORD = 'gateway';
+const TOKEN_TTL = 7200;			/* seconds since the last use */
+const WIFI_WAIT = 90;			/* seconds to connect before rolling back */
+const SBIN = '/usr/sbin';
+
+umask(077);
+@mkdir(STATE, 0700, true);
+@mkdir(RUN, 0700, true);
+
+/* ---- small helpers ----------------------------------------------------- */
+
+class Fail extends Exception {}
+function fail(string $m) { throw new Fail($m); }
+
+function run(array $argv, ?int &$rc = null): string
+{
+	$cmd = implode(' ', array_map('escapeshellarg', $argv)) . ' 2>/dev/null';
+	exec($cmd, $out, $rc);
+	return implode("\n", $out);
+}
+
+/* write a file atomically (temporary file in the same directory, rename) */
+function put_atomic(string $file, string $data, int $mode): void
+{
+	$tmp = $file . '.zlg-new';
+	if (file_put_contents($tmp, $data) === false)
+		fail("cannot write $file");
+	chmod($tmp, $mode);
+	$fh = fopen($tmp, 'r');
+	fsync($fh);
+	fclose($fh);
+	rename($tmp, $file) || fail("cannot replace $file");
+}
+
+function with_lock(string $name, callable $f)
+{
+	$fh = fopen(RUN . "/$name.lock", 'c');
+	flock($fh, LOCK_EX);
+	try {
+		return $f();
+	} finally {
+		flock($fh, LOCK_UN);
+		fclose($fh);
+	}
+}
+
+function json_file(string $f): array
+{
+	$d = is_file($f) ? json_decode((string)file_get_contents($f), true) : null;
+	return is_array($d) ? $d : [];
+}
+
+/* ---- password and tokens ------------------------------------------------ */
+
+function password_file(): string { return STATE . '/password'; }
+
+function password_ok(string $pw): bool
+{
+	$h = is_file(password_file()) ? trim((string)file_get_contents(password_file())) : '';
+	if ($h === '')
+		return hash_equals(DEFAULT_PASSWORD, $pw);
+	return password_verify($pw, $h);
+}
+
+function set_password(string $pw): void
+{
+	put_atomic(password_file(), password_hash($pw, PASSWORD_DEFAULT) . "\n", 0600);
+}
+
+/* tokens are kept as SHA-256 hashes with the time of their last use */
+function tokens_update(callable $f)
+{
+	return with_lock('tokens', function () use ($f) {
+		$file = RUN . '/tokens.json';
+		$t = json_file($file);
+		$now = time();
+		$t = array_filter($t, fn($last) => $now - $last < TOKEN_TTL);
+		$r = $f($t, $now);
+		put_atomic($file, json_encode($t), 0600);
+		return $r;
+	});
+}
+
+function token_valid(?string $token): bool
+{
+	if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/', $token))
+		return false;
+	$h = hash('sha256', $token);
+	return tokens_update(function (&$t, $now) use ($h) {
+		if (!isset($t[$h]))
+			return false;
+		$t[$h] = $now;
+		return true;
+	});
+}
+
+function need_token(array $req): void
+{
+	token_valid($req['token'] ?? null) || fail('login needed');
+}
+
+/* failed logins: at most 5 in 5 minutes */
+function login_allowed(): bool
+{
+	$f = json_file(RUN . '/login-failures.json');
+	return count(array_filter($f, fn($t) => time() - $t < 300)) < 5;
+}
+
+function login_failed(): void
+{
+	with_lock('failures', function () {
+		$file = RUN . '/login-failures.json';
+		$f = array_values(array_filter(json_file($file), fn($t) => time() - $t < 300));
+		$f[] = time();
+		put_atomic($file, json_encode($f), 0600);
+	});
+	sleep(1);
+}
+
+function op_auth_login(array $req): array
+{
+	login_allowed() || fail('too many wrong passwords; try again in 5 minutes');
+	if (!password_ok((string)($req['password'] ?? ''))) {
+		login_failed();
+		fail('wrong password');
+	}
+	$token = bin2hex(random_bytes(32));
+	$h = hash('sha256', $token);
+	tokens_update(function (&$t, $now) use ($h) { $t[$h] = $now; });
+	return ['token' => $token];
+}
+
+function op_auth_check(array $req): array
+{
+	return ['valid' => token_valid($req['token'] ?? null)];
+}
+
+function op_auth_logout(array $req): array
+{
+	$token = (string)($req['token'] ?? '');
+	$h = hash('sha256', $token);
+	tokens_update(function (&$t) use ($h) { unset($t[$h]); });
+	return [];
+}
+
+function op_auth_passwd(array $req): array
+{
+	need_token($req);
+	login_allowed() || fail('too many wrong passwords; try again in 5 minutes');
+	if (!password_ok((string)($req['old'] ?? ''))) {
+		login_failed();
+		fail('the current password is wrong');
+	}
+	$new = (string)($req['new'] ?? '');
+	if (strlen($new) < 8 || strlen($new) > 128 || preg_match('/[\x00-\x1f\x7f]/', $new))
+		fail('the new password needs 8 to 128 characters');
+	set_password($new);
+	/* everyone else is logged out */
+	$keep = hash('sha256', (string)$req['token']);
+	tokens_update(function (&$t) use ($keep) { $t = array_intersect_key($t, [$keep => 1]); });
+	return [];
+}
+
+/* ---- Wi-Fi: reading -------------------------------------------------------- */
+
+function kv(string $text, string $sep = '='): array
+{
+	$r = [];
+	foreach (explode("\n", $text) as $l)
+		if (($p = strpos($l, $sep)) !== false)
+			$r[trim(substr($l, 0, $p))] = trim(substr($l, $p + 1));
+	return $r;
+}
+
+/* wpa_supplicant writes an SSID as "text" or as hex */
+function wpa_ssid(string $v): string
+{
+	if (strlen($v) >= 2 && $v[0] === '"' && str_ends_with($v, '"'))
+		return substr($v, 1, -1);
+	return ctype_xdigit($v) && strlen($v) % 2 === 0 ? hex2bin($v) : $v;
+}
+
+/* the networks in the wpa_supplicant file: [ssid, security, lines] */
+function wpa_parse(string $conf): array
+{
+	$head = [];
+	$nets = [];
+	$cur = null;
+	foreach (explode("\n", $conf) as $l) {
+		$t = trim($l);
+		if ($cur === null && preg_match('/^network\s*=\s*\{$/', $t)) {
+			$cur = [];
+			continue;
+		}
+		if ($cur !== null) {
+			if ($t === '}') {
+				$nets[] = $cur;
+				$cur = null;
+			} elseif ($t !== '' && $t[0] !== '#' && ($p = strpos($t, '=')) !== false) {
+				$cur[substr($t, 0, $p)] = substr($t, $p + 1);
+			}
+			continue;
+		}
+		if ($t !== '' && $t[0] !== '#' && ($p = strpos($t, '=')) !== false)
+			$head[substr($t, 0, $p)] = substr($t, $p + 1);
+	}
+	$out = [];
+	foreach ($nets as $n) {
+		$km = $n['key_mgmt'] ?? 'WPA-PSK';
+		$sec = str_contains($km, 'SAE') ? 'wpa3' : ($km === 'NONE' ? 'open' : 'wpa2');
+		$out[] = ['ssid' => wpa_ssid($n['ssid'] ?? ''), 'security' => $sec, 'lines' => $n];
+	}
+	return ['head' => $head, 'networks' => $out];
+}
+
+function net_parse(string $conf): array
+{
+	$r = ['mode' => 'dhcp', 'address' => '', 'gateway' => '', 'dns' => []];
+	foreach (explode("\n", $conf) as $l) {
+		$l = trim($l);
+		if (preg_match('/^DHCP\s*=\s*(\S+)/i', $l, $m))
+			$r['mode'] = in_array(strtolower($m[1]), ['yes', 'ipv4', 'true'], true) ? 'dhcp' : 'static';
+		elseif (preg_match('/^Address\s*=\s*(\S+)/i', $l, $m))
+			$r['address'] = $m[1];
+		elseif (preg_match('/^Gateway\s*=\s*(\S+)/i', $l, $m))
+			$r['gateway'] = $m[1];
+		elseif (preg_match('/^DNS\s*=\s*(.+)$/i', $l, $m))
+			$r['dns'] = array_merge($r['dns'], preg_split('/\s+/', trim($m[1])));
+	}
+	if ($r['address'] !== '' && !preg_match('/^DHCP\s*=\s*(yes|ipv4|true)/mi', $conf))
+		$r['mode'] = 'static';
+	return $r;
+}
+
+function wifi_link(): array
+{
+	$s = kv(run([SBIN . '/wpa_cli', '-i', IFACE, 'status']));
+	$link = run([SBIN . '/iw', 'dev', IFACE, 'link']);
+	$r = [
+		'state' => $s['wpa_state'] ?? '',
+		'ssid' => isset($s['ssid']) ? stripcslashes($s['ssid']) : '',
+		'bssid' => $s['bssid'] ?? '',
+		'freq' => isset($s['freq']) ? (int)$s['freq'] : null,
+		'ip' => $s['ip_address'] ?? '',
+		'key_mgmt' => $s['key_mgmt'] ?? '',
+		'signal' => preg_match('/signal:\s*(-?\d+)/', $link, $m) ? (int)$m[1] : null,
+		'rx_rate' => preg_match('/rx bitrate:\s*([\d.]+ \S+)/', $link, $m) ? $m[1] : '',
+		'tx_rate' => preg_match('/tx bitrate:\s*([\d.]+ \S+)/', $link, $m) ? $m[1] : '',
+	];
+	return $r;
+}
+
+function op_wifi_status(array $req): array
+{
+	$present = is_dir('/sys/class/net/' . IFACE);
+	$driver = $present ? basename((string)@readlink('/sys/class/net/' . IFACE . '/device/driver')) : '';
+	$wpa = wpa_parse(is_file(WPA_CONF) ? (string)file_get_contents(WPA_CONF) : '');
+	$net = net_parse(is_file(NET_CONF) ? (string)file_get_contents(NET_CONF) : '');
+	$nets = array_map(fn($n) => ['ssid' => $n['ssid'], 'security' => $n['security']], $wpa['networks']);
+	$route = run([SBIN . '/ip', '-4', 'route', 'show', 'default', 'dev', IFACE]);
+	return [
+		'present' => $present,
+		'driver' => $driver,
+		'link' => $present ? wifi_link() : null,
+		'prefix' => $present && preg_match('~inet [\d.]+/(\d+)~', run([SBIN . '/ip', '-4', 'addr', 'show', 'dev', IFACE]), $m) ? (int)$m[1] : null,
+		'route' => preg_match('/default via ([\d.]+)/', $route, $m) ? $m[1] : '',
+		'country' => $wpa['head']['country'] ?? '',
+		'networks' => $nets,
+		'ipv4' => $net,
+		'apply' => json_file(RUN . '/wifi-apply.json'),
+	];
+}
+
+function op_wifi_scan(array $req): array
+{
+	need_token($req);
+	is_dir('/sys/class/net/' . IFACE) || fail('no Wi-Fi adapter');
+	run([SBIN . '/wpa_cli', '-i', IFACE, 'scan']);
+	sleep(5);
+	$res = run([SBIN . '/wpa_cli', '-i', IFACE, 'scan_results']);
+	$best = [];
+	foreach (array_slice(explode("\n", $res), 1) as $l) {
+		$f = explode("\t", $l);
+		if (count($f) < 5)
+			continue;
+		$ssid = stripcslashes($f[4]);
+		if ($ssid === '' || str_starts_with($ssid, "\0"))
+			continue;
+		$flags = $f[3];
+		$sec = str_contains($flags, 'SAE') && !str_contains($flags, 'PSK') ? 'wpa3'
+			: (str_contains($flags, 'PSK') ? 'wpa2' : (str_contains($flags, 'WEP') ? 'wep' : 'open'));
+		$sig = (int)$f[2];
+		if (!isset($best[$ssid]) || $sig > $best[$ssid]['signal'])
+			$best[$ssid] = ['ssid' => $ssid, 'signal' => $sig, 'freq' => (int)$f[1],
+					'security' => $sec, 'aps' => ($best[$ssid]['aps'] ?? 0) + 1];
+		else
+			$best[$ssid]['aps']++;
+	}
+	usort($best, fn($a, $b) => $b['signal'] <=> $a['signal']);
+	return ['networks' => array_values($best)];
+}
+
+/* ---- Wi-Fi: applying ------------------------------------------------------- */
+
+function ipv4_ok(string $ip): bool
+{
+	return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+}
+
+function in_subnet(string $ip, string $net, int $prefix): bool
+{
+	$mask = $prefix === 0 ? 0 : (~0 << (32 - $prefix)) & 0xffffffff;
+	return (ip2long($ip) & $mask) === (ip2long($net) & $mask);
+}
+
+function wpa_quote_ssid(string $ssid): string
+{
+	if (preg_match('/^[\x20-\x7e]*$/', $ssid) && !str_contains($ssid, '"'))
+		return '"' . $ssid . '"';
+	return bin2hex($ssid);
+}
+
+function op_wifi_apply(array $req): array
+{
+	need_token($req);
+	$ssid = (string)($req['ssid'] ?? '');
+	$sec = (string)($req['security'] ?? '');
+	$pass = (string)($req['passphrase'] ?? '');
+	$mode = (string)($req['ipv4'] ?? 'dhcp');
+
+	(strlen($ssid) >= 1 && strlen($ssid) <= 32 && !preg_match('/[\x00-\x1f]/', $ssid))
+		|| fail('the network name needs 1 to 32 characters');
+	in_array($sec, ['open', 'wpa2', 'wpa3'], true) || fail('unknown security type');
+	in_array($mode, ['dhcp', 'static'], true) || fail('unknown address mode');
+
+	$cur = wpa_parse(is_file(WPA_CONF) ? (string)file_get_contents(WPA_CONF) : '');
+	$country = $cur['head']['country'] ?? 'US';
+	preg_match('/^[A-Z]{2}$/', $country) || $country = 'US';
+
+	$net = ["\tssid=" . wpa_quote_ssid($ssid)];
+	if ($sec !== 'open') {
+		if ($pass === '') {
+			/* keep the stored key: only for the same network and security */
+			$old = null;
+			foreach ($cur['networks'] as $n)
+				if ($n['ssid'] === $ssid && $n['security'] === $sec)
+					$old = $n['lines'];
+			$key = $sec === 'wpa2' ? 'psk' : 'sae_password';
+			($old !== null && isset($old[$key]))
+				|| fail('enter the Wi-Fi password (no stored one for this network)');
+			$keyline = "\t$key=" . $old[$key];
+		} else {
+			(strlen($pass) >= 8 && strlen($pass) <= 63 && preg_match('/^[\x20-\x7e]+$/', $pass))
+				|| fail('the Wi-Fi password needs 8 to 63 characters (letters, digits, punctuation, spaces)');
+			/* WPA2: only the derived key is stored, as wpa_passphrase does */
+			$keyline = $sec === 'wpa2'
+				? "\tpsk=" . hash_pbkdf2('sha1', $pass, $ssid, 4096, 64)
+				: "\tsae_password=\"" . $pass . '"';
+		}
+		$net[] = $sec === 'wpa2' ? "\tkey_mgmt=WPA-PSK" : "\tkey_mgmt=SAE";
+		$net[] = $keyline;
+		if ($sec === 'wpa3')
+			$net[] = "\tieee80211w=2";
+	} else {
+		$net[] = "\tkey_mgmt=NONE";
+	}
+	$wpa = "ctrl_interface=/run/wpa_supplicant\nupdate_config=1\ncountry=$country\n\n" .
+	       "network={\n" . implode("\n", $net) . "\n}\n";
+
+	$netconf = "[Match]\nName=wlan*\n\n[Network]\n";
+	if ($mode === 'dhcp') {
+		$netconf .= "DHCP=yes\n";
+	} else {
+		$addr = (string)($req['address'] ?? '');
+		$gw = (string)($req['gateway'] ?? '');
+		$dns = array_values(array_filter(preg_split('/[\s,]+/', (string)($req['dns'] ?? ''))));
+		preg_match('~^([\d.]+)/(\d{1,2})$~', $addr, $m) && ipv4_ok($m[1]) && $m[2] >= 8 && $m[2] <= 30
+			|| fail('the address must look like 192.168.1.50/24');
+		ipv4_ok($gw) || fail('the gateway (router) address is not valid');
+		in_subnet($gw, $m[1], (int)$m[2]) || fail('the gateway is not in the address\'s network');
+		$gw !== $m[1] || fail('the address and the gateway are the same');
+		count($dns) <= 3 || fail('at most 3 DNS servers');
+		foreach ($dns as $d)
+			ipv4_ok($d) || fail("DNS server $d is not a valid address");
+		$netconf .= "Address=$addr\nGateway=$gw\n";
+		foreach ($dns ?: [$gw] as $d)
+			$netconf .= "DNS=$d\n";
+	}
+
+	return with_lock('wifi', function () use ($wpa, $netconf, $ssid) {
+		$st = json_file(RUN . '/wifi-apply.json');
+		if (in_array($st['state'] ?? '', ['starting', 'applying', 'rolling_back'], true) &&
+		    time() - ($st['time'] ?? 0) < 600)
+			fail('a Wi-Fi change is already in progress');
+		@mkdir(RUN . '/wifi-new', 0700);
+		put_atomic(RUN . '/wifi-new/wpa.conf', $wpa, 0600);
+		put_atomic(RUN . '/wifi-new/net.conf', $netconf, 0644);
+		$id = bin2hex(random_bytes(6));
+		wifi_status(['id' => $id, 'state' => 'starting', 'ssid' => $ssid]);
+		run(['/usr/bin/systemd-run', '--quiet', '--collect', '--unit=zlg-wifi-apply-' . $id,
+		     '--property=Type=exec', '/usr/local/sbin/zlg-admin', '--wifi-apply-job'], $rc);
+		if ($rc !== 0) {
+			wifi_status(['id' => $id, 'state' => 'failed', 'ssid' => $ssid,
+				     'message' => 'could not start the change']);
+			fail('could not start the change');
+		}
+		return ['id' => $id, 'wait' => WIFI_WAIT];
+	});
+}
+
+function wifi_status(array $s): void
+{
+	$s['time'] = time();
+	put_atomic(RUN . '/wifi-apply.json', json_encode($s), 0600);
+}
+
+function wifi_restart(): void
+{
+	run(['/usr/bin/systemctl', 'restart', 'wpa_supplicant@' . IFACE . '.service']);
+	run(['/usr/bin/networkctl', 'reload']);
+	run(['/usr/bin/networkctl', 'reconfigure', IFACE]);
+}
+
+/* connected: associated, an IPv4 address, and the router answers */
+function wifi_connected(): ?array
+{
+	$l = wifi_link();
+	if ($l['state'] !== 'COMPLETED' || $l['ip'] === '')
+		return null;
+	$route = run([SBIN . '/ip', '-4', 'route', 'show', 'default', 'dev', IFACE]);
+	if (!preg_match('/default via ([\d.]+)/', $route, $m))
+		return null;
+	run(['/usr/bin/ping', '-c', '1', '-W', '2', '-I', IFACE, $m[1]], $rc);
+	return $rc === 0 ? $l : null;
+}
+
+function wifi_wait(int $secs): ?array
+{
+	$end = time() + $secs;
+	sleep(5);	/* let the restart take the old link down first */
+	do {
+		if ($l = wifi_connected())
+			return $l;
+		sleep(3);
+	} while (time() < $end);
+	return null;
+}
+
+function wifi_apply_job(): void
+{
+	$st = json_file(RUN . '/wifi-apply.json');
+	$id = $st['id'] ?? '';
+	$ssid = $st['ssid'] ?? '';
+	$prev = STATE . '/wifi-prev';
+	@mkdir($prev, 0700);
+	copy(WPA_CONF, "$prev/wpa.conf") || fail('cannot back up ' . WPA_CONF);
+	copy(NET_CONF, "$prev/net.conf") || fail('cannot back up ' . NET_CONF);
+	/* if the power goes before this is confirmed, --wifi-guard puts the
+	   previous files back at the next boot */
+	touch(STATE . '/wifi-pending');
+	run(['/usr/bin/sync']);
+
+	wifi_status(['id' => $id, 'state' => 'applying', 'ssid' => $ssid]);
+	put_atomic(WPA_CONF, (string)file_get_contents(RUN . '/wifi-new/wpa.conf'), 0600);
+	put_atomic(NET_CONF, (string)file_get_contents(RUN . '/wifi-new/net.conf'), 0644);
+	wifi_restart();
+	$l = wifi_wait(WIFI_WAIT);
+	if ($l) {
+		@unlink(STATE . '/wifi-pending');
+		run(['/usr/bin/sync']);
+		wifi_status(['id' => $id, 'state' => 'ok', 'ssid' => $ssid, 'ip' => $l['ip'],
+			     'message' => "connected to {$l['ssid']}"]);
+		syslog(LOG_NOTICE, "zlg-admin: Wi-Fi changed to \"$ssid\", connected as {$l['ip']}");
+		return;
+	}
+
+	syslog(LOG_WARNING, "zlg-admin: Wi-Fi \"$ssid\" did not connect in " . WIFI_WAIT . " s; restoring the previous settings");
+	wifi_status(['id' => $id, 'state' => 'rolling_back', 'ssid' => $ssid]);
+	put_atomic(WPA_CONF, (string)file_get_contents("$prev/wpa.conf"), 0600);
+	put_atomic(NET_CONF, (string)file_get_contents("$prev/net.conf"), 0644);
+	@unlink(STATE . '/wifi-pending');
+	run(['/usr/bin/sync']);
+	wifi_restart();
+	$l = wifi_wait(WIFI_WAIT);
+	wifi_status(['id' => $id, 'state' => $l ? 'rolled_back' : 'rollback_failed', 'ssid' => $ssid,
+		     'ip' => $l['ip'] ?? '',
+		     'message' => "couldn't connect to \"$ssid\" within " . WIFI_WAIT . ' seconds; ' .
+			($l ? 'the previous settings are back' : 'the previous settings are back but not connected yet')]);
+}
+
+function wifi_guard(): void
+{
+	$prev = STATE . '/wifi-prev';
+	if (!is_file(STATE . '/wifi-pending'))
+		return;
+	if (is_file("$prev/wpa.conf") && is_file("$prev/net.conf")) {
+		put_atomic(WPA_CONF, (string)file_get_contents("$prev/wpa.conf"), 0600);
+		put_atomic(NET_CONF, (string)file_get_contents("$prev/net.conf"), 0644);
+		echo "zlg-admin: an unconfirmed Wi-Fi change was undone\n";
+	}
+	@unlink(STATE . '/wifi-pending');
+	run(['/usr/bin/sync']);
+}
+
+/* ---- the request loop -------------------------------------------------- */
+
+const OPS = [
+	'auth.login' => 'op_auth_login',
+	'auth.check' => 'op_auth_check',
+	'auth.logout' => 'op_auth_logout',
+	'auth.passwd' => 'op_auth_passwd',
+	'wifi.status' => 'op_wifi_status',
+	'wifi.scan' => 'op_wifi_scan',
+	'wifi.apply' => 'op_wifi_apply',
+];
+
+function serve(): void
+{
+	stream_set_timeout(STDIN, 10);
+	$line = fgets(STDIN, 65536);
+	try {
+		$req = is_string($line) ? json_decode($line, true) : null;
+		is_array($req) || fail('bad request');
+		$op = $req['op'] ?? '';
+		isset(OPS[$op]) || fail('unknown request');
+		$r = ['ok' => true] + (OPS[$op])($req);
+	} catch (Fail $e) {
+		$r = ['ok' => false, 'error' => $e->getMessage()];
+	} catch (Throwable $e) {
+		syslog(LOG_ERR, 'zlg-admin: ' . $e->getMessage());
+		$r = ['ok' => false, 'error' => 'internal error'];
+	}
+	fwrite(STDOUT, json_encode($r, JSON_INVALID_UTF8_SUBSTITUTE) . "\n");
+}
+
+openlog('zlg-admin', LOG_PID, LOG_DAEMON);
+try {
+	switch ($argv[1] ?? '') {
+	case '':
+		serve();
+		break;
+	case '--wifi-apply-job':
+		try {
+			wifi_apply_job();
+		} catch (Throwable $e) {
+			/* nothing was changed if the backup failed; otherwise the
+			   guard's rollback runs now rather than at the next boot */
+			wifi_guard();
+			wifi_restart();
+			$st = json_file(RUN . '/wifi-apply.json');
+			wifi_status(['id' => $st['id'] ?? '', 'state' => 'failed', 'ssid' => $st['ssid'] ?? '',
+				     'message' => $e->getMessage()]);
+			throw $e;
+		}
+		break;
+	case '--wifi-guard':
+		wifi_guard();
+		break;
+	case '--reset-password':
+		@unlink(password_file());
+		echo "The settings password is \"" . DEFAULT_PASSWORD . "\" again.\n";
+		break;
+	default:
+		fwrite(STDERR, "usage: zlg-admin [--wifi-apply-job | --wifi-guard | --reset-password]\n");
+		exit(2);
+	}
+} catch (Fail $e) {
+	fwrite(STDERR, 'zlg-admin: ' . $e->getMessage() . "\n");
+	exit(1);
+}
