@@ -302,13 +302,20 @@ function mi_csv_line(array $f): string
 	}, $f)) . "\r\n";
 }
 
+/* frequency limits are offsets from the nominal frequency; unknown, they
+   are shown as offsets */
+function mi_label(array $meta, string $n): string
+{
+	return $meta['freq'] === null ? str_replace(' (Hz)', ' (Hz from nominal)', $n) : $n;
+}
+
 function mi_report_csv(array $meta, array $mods): string
 {
 	$head = ['Module', 'ID', 'Basic read', 'Extended read', 'Version'];
 	foreach (MI_BASIC as $k => $n)
-		$head[] = $n;
+		$head[] = mi_label($meta, $n);
 	foreach (MI_OLD as $k => $n)
-		$head[] = "$n [2021 encoding]";
+		$head[] = mi_label($meta, $n) . ' [2021 encoding]';
 	foreach (MI_EXT as $k => $n)
 		$head[] = $n;
 	$head[] = 'Raw basic (0001)';
@@ -421,8 +428,9 @@ function mi_ranges(array $ns): string
 	return implode(', ', $out);
 }
 
-function mi_table(MiPdf $p, string $title, array $fields, array $groups, string $key): void
+function mi_table(MiPdf $p, string $title, array $fields, array $groups, string $key, array $meta): void
 {
+	$fields = array_map(fn($n) => mi_label($meta, $n), $fields);
 	$cols = array_slice($groups, 0, 4);	/* fits the page width */
 	$w = 31;
 	$p->room(count($fields) + 4);
@@ -456,7 +464,9 @@ function mi_report_pdf(array $meta, array $mods): string
 		'Generated' => $meta['time'],
 		'Gateway' => $meta['host'] . ', NEP firmware ' . $meta['firmware'],
 		'Modules' => count($mods) . ' configured; read: ' . $meta['read_ok'] . ' basic, ' . $meta['ext_ok'] . ' extended',
-		'Grid frequency' => $meta['freq'] . ' Hz (frequency limits are offsets from it)',
+		'Grid frequency' => $meta['freq'] === null
+			? 'unknown (no recent readings): frequency limits are shown as offsets from nominal'
+			: $meta['freq'] . ' Hz nominal, ' . $meta['freq_src'],
 		'Decoding' => "as firmware 20230903's MI Setup page shows the settings",
 	] as $k => $v)
 		$p->line(str_pad("$k:", 17) . $v);
@@ -496,13 +506,13 @@ function mi_report_pdf(array $meta, array $mods): string
 	$p->line();
 	for ($i = 0; $i < count($groups); $i += 4) {
 		$set = array_slice($groups, $i, 4);
-		mi_table($p, 'Basic settings (MI Setup 20230903)', MI_BASIC, $set, 'basic');
+		mi_table($p, 'Basic settings (MI Setup 20230903)', MI_BASIC, $set, 'basic', $meta);
 		$old = array_values(array_filter($set, fn($g) => in_array((int)($g['basic']['grid'] ?? 0), [6, 7], true)));
 		if ($old)
-			mi_table($p, 'Grid 6/7 voltages and frequencies in the 2021 encoding (not confirmed)', MI_OLD, $old, 'old');
+			mi_table($p, 'Grid 6/7 voltages and frequencies in the 2021 encoding (not confirmed)', MI_OLD, $old, 'old', $meta);
 		$ext = array_values(array_filter($set, fn($g) => $g['ext']));
 		if ($ext)
-			mi_table($p, 'Extended settings (IEEE 1547 / Rule 21 functions)', MI_EXT, $ext, 'ext');
+			mi_table($p, 'Extended settings (IEEE 1547 / Rule 21 functions)', MI_EXT, $ext, 'ext', $meta);
 	}
 	$p->room(6);
 	$p->line('Raw replies', true);
