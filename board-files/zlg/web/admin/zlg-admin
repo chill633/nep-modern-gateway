@@ -629,7 +629,8 @@ function op_modules_set(array $req): array
 	foreach (array_slice($old, 0, -10) as $o)
 		unlink($o);
 	put_atomic($f, $new, fileperms($f) & 0777);
-	syslog(LOG_NOTICE, 'zlg-admin: plc_id.conf saved, ' . count($ids) . ' modules; restarting the gateway software');
+	syslog(LOG_NOTICE, 'zlg-admin: ' . gw() . '/plc_id.conf saved, ' . count($ids) . ' modules' .
+	       (gw() === GW ? '; restarting the gateway software' : ''));
 	/* NEP's programs read the list when they start: restart them the way
 	   NEP's own "reboot" does (zlg-restart.path restarts zlg.target) */
 	if (gw() === GW)
