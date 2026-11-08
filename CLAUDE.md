@@ -333,11 +333,26 @@ was run and the copies were deleted.
   raw replies in ~/Working/nep-local/mi-baseline-20261108.txt and
   /var/lib/zlg-admin/ on the board (they contain module IDs: never commit).
   Modules 23/24 reply all zeros (the unplugged inverter); 3-22 identical;
-  1/2 (one inverter) differ in reply bytes 15, 19 and 39. NEP's decoder
-  shows grid 6 (1547.1 240/120V) with odd values (VAC_MIN_2 -18.0 V,
-  VAC_MIN 26.0 V, frequency limits 45.6-74.4 Hz, wider than the
-  US-240-1547A file's 57-62 Hz): not yet understood; work it out before
-  any write. Replies echo the module ID in bytes 4-7 and 10-13.
+  1/2 (one inverter) differ in reply bytes 15, 19 and 39. Replies echo the
+  module ID in bytes 4-7 and 10-13.
+- The odd decoded values, worked out 2026-11-08 (code + baseline only):
+  the inverters report grid 6 (byte 14). The 2023 decoder (proc(), and the
+  encoder vacset()/freqset() as its inverse) handles grid 6 with fixed
+  tables: maxv = 270 + b/10, minv/minv2 = 200 - b (gain 1, hence -18 V
+  and 26 V), f = fre +- b/10 (fre = the page's Grid Frequency field). The
+  2021 decoder handled grid 6 like grid 1: V = 220 +- b*4/ac_v_gain
+  (17.447 for "33"), f = 60 +- b/32. The bytes fit the 2021 scheme
+  exactly: 0xae/0xc0/0xda = 40.0/44.0/50.0 V, 0x30/0x36/0x90 =
+  1.5/1.69/4.5 Hz, i.e. OV 260 V (stage 1), 264 V; UV 170 V (180 V on
+  module 1/2's minv/sminv), 170 V; OF 61.5, 64.5 Hz; UF 58.3, 55.5 Hz;
+  rect 600 s; pwr 760 W. No NEP profile (2021 or 2023, incl. custom)
+  matches byte for byte: likely factory settings. Inverter version bytes
+  8-9 = c9 8b. Unconfirmed: which encoding the inverter firmware uses for
+  grid 6, the 220 V midpoint, the timing bytes (30-37, all 01 08). If it
+  is the old one, a 2023-page write of US-240-1547A would put VAC_MIN at
+  ~199 V instead of 108 V. Keep ZLG_MI_WRITES=0 until NEP answers (the
+  question is in the local vendor report); a one-inverter test was judged
+  unsafe.
 
 ## Production moved to the New unit (2026-11-06)
 
