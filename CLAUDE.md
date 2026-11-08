@@ -313,12 +313,22 @@ was run and the copies were deleted.
   module 1/2's minv/sminv), 170 V; OF 61.5, 64.5 Hz; UF 58.3, 55.5 Hz;
   rect 600 s; pwr 760 W. No NEP profile (2021 or 2023, incl. custom)
   matches byte for byte: likely factory settings. Inverter version bytes
-  8-9 = c9 8b. Unconfirmed: which encoding the inverter firmware uses for
-  grid 6, the 220 V midpoint, the timing bytes (30-37, all 01 08). If it
-  is the old one, a 2023-page write of US-240-1547A would put VAC_MIN at
-  ~199 V instead of 108 V. Keep ZLG_MI_WRITES=0 until NEP answers (the
-  question is in the local vendor report); a one-inverter test was judged
-  unsafe.
+  8-9 = c9 8b. If the old encoding is the inverters', a 2023-page write of
+  US-240-1547A would put VAC_MIN at ~199 V instead of 108 V.
+- Decision (2026-11-08): the user expects no answer from NEP (questions
+  about older firmware get "update to the latest"), so the question was
+  dropped from the vendor report. Documentation search: NEP's BDM-800
+  datasheet (signaturesolar.com, BDM-550/650/800/1000-070824) gives only
+  the window 211-264 Vac / 59.3-60.5 Hz (adjustable), UL 1741-SA/SB; the
+  BDM-600x manual has no trip table; manualshive/manuals.online blocked.
+  The 2023 reading is physically impossible (-18 V, 74.4 Hz), the 2021
+  one plausible (264 V = the datasheet maximum), so: zlg-admin refuses
+  basic (0001) writes with grid byte (cmd byte 7) 6 or 7 to IDs starting
+  33, even with ZLG_MI_WRITES=1 (tested with writes on and gateway-plc
+  running: refused; a grid-1 command got past the block to "Enter Setup
+  Mode First"); the grid report lists the 2021 reading first. Still
+  unconfirmed: the 220 V midpoint and the timing bytes (30-37, all 01 08);
+  a one-inverter test was judged unsafe.
 
 ## Production moved to the New unit (2026-11-06)
 
@@ -462,8 +472,8 @@ tested on the New unit (.239); README 7a "Settings pages" documents them.
   22 modules, 1034 fields, 0 differences (pwr/fref exist only in NEP's
   debug mode, not compared). Output /run/zlg-admin/mi-report.tgz (CSV +
   hand-written Courier PDF, landscape Letter). While it runs, MI Setup's
-  setup/leave/read/write are refused. Grid 6/7 also get the 2021-encoding
-  columns. Live runs: 22 of 25 answered (23/24 no answer, 25 meter
+  setup/leave/read/write are refused. Grid 6/7 get the 2021-encoding
+  columns first (PDF table and CSV columns), then NEP's 2023 reading. Live runs: 22 of 25 answered (23/24 no answer, 25 meter
   skipped); gateway-plc restarted after. Reports contain module
   IDs: never commit one.
 - Browser checks: headless Firefox via /snap/bin/geckodriver and a small

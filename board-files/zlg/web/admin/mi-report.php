@@ -8,8 +8,10 @@
  * NEP's JavaScript on the same replies), and writes a CSV and a PDF.
  *
  * For grid codes 6 and 7 (IEEE 1547A) firmware 20210303's MI Setup used
- * another encoding (as grid 1: 220 +- b*4/AC_V_Gain, f +- b/32); which one
- * the inverters use isn't known, so the report shows both.
+ * another encoding (as grid 1: 220 +- b*4/AC_V_Gain, f +- b/32). The 800B's
+ * stored settings fit that one exactly (round values; 264 V = the
+ * datasheet's upper limit) and the 2023 one not at all (-18 V, 74.4 Hz),
+ * so the report gives the 2021 reading first and NEP's 2023 one after it.
  */
 
 /* ---- NEP's tables (proc(), firmware 20230903), index = grid code - 1 --- */
@@ -312,10 +314,10 @@ function mi_label(array $meta, string $n): string
 function mi_report_csv(array $meta, array $mods): string
 {
 	$head = ['Module', 'ID', 'Basic read', 'Extended read', 'Version'];
-	foreach (MI_BASIC as $k => $n)
-		$head[] = mi_label($meta, $n);
 	foreach (MI_OLD as $k => $n)
-		$head[] = mi_label($meta, $n) . ' [2021 encoding]';
+		$head[] = mi_label($meta, $n) . ' [2021 encoding; grid 6/7]';
+	foreach (MI_BASIC as $k => $n)
+		$head[] = mi_label($meta, $n) . ($k === 'grid' ? '' : ' [MI Setup 2023]');
 	foreach (MI_EXT as $k => $n)
 		$head[] = $n;
 	$head[] = 'Raw basic (0001)';
@@ -323,12 +325,12 @@ function mi_report_csv(array $meta, array $mods): string
 	$out = mi_csv_line($head);
 	foreach ($mods as $m) {
 		$row = [$m['n'], $m['id'], $m['basic_state'], $m['ext_state'], $m['basic']['version'] ?? ''];
+		foreach (MI_OLD as $k => $n)
+			$row[] = $m['old'][$k] ?? '';
 		foreach (MI_BASIC as $k => $n)
 			$row[] = $k === 'grid' && isset($m['basic']['grid'])
 				? $m['basic']['grid'] . ' ' . (MI_GRIDS[$m['basic']['grid']] ?? '')
 				: ($m['basic'][$k] ?? '');
-		foreach (MI_OLD as $k => $n)
-			$row[] = $m['old'][$k] ?? '';
 		foreach (MI_EXT as $k => $n)
 			$row[] = $m['ext'][$k] ?? '';
 		$row[] = $m['raw_basic'] ?? '';
@@ -467,14 +469,17 @@ function mi_report_pdf(array $meta, array $mods): string
 		'Grid frequency' => $meta['freq'] === null
 			? 'unknown (no recent readings): frequency limits are shown as offsets from nominal'
 			: $meta['freq'] . ' Hz nominal, ' . $meta['freq_src'],
-		'Decoding' => "as firmware 20230903's MI Setup page shows the settings",
+		'Decoding' => "as firmware 20230903's MI Setup page shows the settings, and for grid codes",
+		'' => "6 and 7 also in firmware 20210303's encoding (see below)",
 	] as $k => $v)
-		$p->line(str_pad("$k:", 17) . $v);
+		$p->line(str_pad($k === '' ? '' : "$k:", 17) . $v);
 	$p->line();
 	foreach ([
-		'For grid codes 6 and 7 (IEEE 1547A), firmware 20210303\'s MI Setup used another encoding',
-		'(220 +- b x 4 / AC_V_Gain volts, frequency +- b / 32 Hz); which one the inverters use is not',
-		'confirmed, so those modules also show the voltages and frequencies in that encoding.',
+		'Grid codes 6 and 7 (IEEE 1547A): firmware 20210303\'s MI Setup encoded their voltages and',
+		'frequencies as 220 +- b x 4 / AC_V_Gain V and f +- b / 32 Hz; firmware 20230903\'s uses fixed',
+		'offsets instead. NEP\'s 800B inverters hold values that fit the 2021 encoding exactly (round',
+		'numbers; 264 V is the datasheet\'s upper limit) and read as impossible values in the 2023 one',
+		'(e.g. -18 V, 74.4 Hz), so the 2021 reading comes first. NEP has not confirmed either.',
 		'Raw replies are at the end and in the CSV file.',
 	] as $l)
 		$p->line($l);
@@ -506,10 +511,11 @@ function mi_report_pdf(array $meta, array $mods): string
 	$p->line();
 	for ($i = 0; $i < count($groups); $i += 4) {
 		$set = array_slice($groups, $i, 4);
-		mi_table($p, 'Basic settings (MI Setup 20230903)', MI_BASIC, $set, 'basic', $meta);
 		$old = array_values(array_filter($set, fn($g) => in_array((int)($g['basic']['grid'] ?? 0), [6, 7], true)));
 		if ($old)
-			mi_table($p, 'Grid 6/7 voltages and frequencies in the 2021 encoding (not confirmed)', MI_OLD, $old, 'old', $meta);
+			mi_table($p, 'Grid 6/7 voltages and frequencies, 2021 encoding (fits the stored values)', MI_OLD, $old, 'old', $meta);
+		mi_table($p, $old ? 'Basic settings as MI Setup 20230903 shows them (grid 6/7 voltages and frequencies: see above)'
+				   : 'Basic settings (MI Setup 20230903)', MI_BASIC, $set, 'basic', $meta);
 		$ext = array_values(array_filter($set, fn($g) => $g['ext']));
 		if ($ext)
 			mi_table($p, 'Extended settings (IEEE 1547 / Rule 21 functions)', MI_EXT, $ext, 'ext', $meta);

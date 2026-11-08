@@ -772,6 +772,13 @@ checks every request itself; the pages reach it over a socket
     `/var/lib/zlg-admin/mi-writes.log`). Wrong values can make the
     inverters disconnect from the grid or run outside what the utility
     allows; read every module first and keep the replies as a baseline.
+  * **Grid codes 6 and 7 are never written to 800B inverters** (IDs
+    starting `33`), whatever `ZLG_MI_WRITES` says. NEP's 2021 and 2023 MI
+    Setup pages encode these grid codes differently, and the settings in
+    the 800B inverters fit the 2021 encoding exactly (round values, 264 V
+    being the datasheet's upper limit) while the 2023 page shows them as
+    impossible ones (-18 V, 74.4 Hz). A write from the 2023 page could set
+    other trip limits than the ones it shows.
   * **Generate Grid Report** (needs the settings password) reads every
     module's settings (about 5 seconds per module, no readings meanwhile;
     `gateway-plc` starts again afterwards) and offers a `.tgz` with a CSV
@@ -780,11 +787,11 @@ checks every request itself; the pages reach it over a socket
     frequency limits are offsets from the nominal grid frequency, which the
     report takes from the frequency the inverters measure (their last
     minute readings, rounded to 50 or 60 Hz), else from the grid code;
-    without either it shows the offsets. The settings are decoded as firmware
-    20230903's MI Setup shows them; for grid codes 6 and 7 the report also
-    gives the voltages and frequencies in firmware 20210303's encoding,
-    because which of the two the inverters use isn't confirmed. Meters
-    (IDs starting `FF`) are skipped.
+    without either it shows the offsets. For grid codes 6 and 7 the
+    voltages and frequencies come first in firmware 20210303's encoding,
+    which fits the 800B's stored values, then as firmware 20230903's MI
+    Setup shows them; other settings are decoded as the 2023 page does.
+    Meters (IDs starting `FF`) are skipped.
   * Only firmware 20230903's MI Setup is built. **Firmware 20210303's
     doesn't know the 800B inverters (IDs starting `33`)**: it would encode
     the voltage trips about 17 times too low and the power limit doubled.
