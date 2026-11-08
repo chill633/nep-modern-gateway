@@ -72,15 +72,17 @@
 				c[k] = rbyte(r, k);
 			c[6] = 0;	/* frequency calibration: never from here */
 			c[9] = Math.max(0, r[16] - RECT_STORED_PLUS);	/* keeps the stored reconnect time */
-			var vmax = MID + 255 * 4 / gain, vmin = MID - 255 * 4 / gain;
+			var step = 4 / gain;
 			function volt(n, over) {
-				var x = set[n];
-				if (over ? !(x > MID && x <= vmax) : !(x < MID && x >= vmin)) {
-					errors.push(n + ' ' + x + ' V: this encoding holds ' + (over ? fix(MID + 0.25, 1) + ' to ' + fix(vmax, 1)
-						: fix(vmin, 1) + ' to ' + fix(MID - 0.25, 1)) + ' V');
+				/* by the byte it encodes to (1 to 255), so the limits as
+				   printed (278.5, 161.5 V) are accepted */
+				var x = set[n], b = Math.round(Math.abs(x - MID) / step);
+				if ((over ? !(x > MID) : !(x < MID)) || !(b >= 1 && b <= 255)) {
+					errors.push(n + ' ' + x + ' V: this encoding holds ' + (over ? fix(MID + step, 1) + ' to ' + fix(MID + 255 * step, 1)
+						: fix(MID - 255 * step, 1) + ' to ' + fix(MID - step, 1)) + ' V');
 					return;
 				}
-				c[CMD[n]] = Math.round(Math.abs(x - MID) * gain / 4);
+				c[CMD[n]] = b;
 				var back = MID + (over ? 1 : -1) * c[CMD[n]] * 4 / gain;
 				if (Math.abs(back - x) >= 0.05)
 					notes.push(n + ' ' + x + ' V is written as ' + fix(back, 1) + ' V');

@@ -395,6 +395,21 @@ was run and the copies were deleted.
   local_tz()). Verified live: Check of 3/4 through the page; offline: the
   JS encoder reproduces the restore command and the PHP decoder equals
   the JS one. **No write through the page yet; ZLG_MI_WRITES still 0.**
+- Closest-possible profile (2026-11-08, local: closest-profile.csv,
+  PTO-closest.conf, README there): installed on .239 as the custom
+  profile "PTO-closest" (misetup/setting/custom; flag_fw=1, flag_vw=0,
+  flag_vc=4, flag_ctrl=1 set the page's switches); choosing it fills
+  every field (checked in Firefox). Basic command from the page's encoder,
+  same for modules 1 and 3: 0001000000000006be82ffffffff26c070407040302618
+  1408140fff0fff018c1003. Volt-var proposal Q1 44 / Q4 -44 (needs the
+  utility's OK). Extended (0002) writes go through NEP's mwrite_extend:
+  2021 and 2023 encode volt-var, freq-watt, V_Norm and ramp identically
+  (they differ in the temperature offset, 3 control flags, watt-PF Q);
+  unticked groups are sent as 00 (probably "unchanged", unproven: leave
+  Temperature MAX and Control Flag unticked, compare the read-back).
+  Building it found a bug, fixed: the voltage range check compared the raw
+  value, so the printed limits 278.5/161.5 V were refused; it now checks
+  the encoded byte (1-255). Nothing written yet; waiting for the utility.
 - Utility profile (local only: ~/Working/nep-local/grid-settings/, CFF v2.0
   -> NEP field mapping, names the utility, never commit): can't encode
   OV2 288 V, UV2 120 V, OF1/UF1 300 s, ES_V_LOW 220.08 V; NEP's volt-var
