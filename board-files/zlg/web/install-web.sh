@@ -111,6 +111,8 @@ fi
 port=$(sed -n 's/^ZLG_WEB_PORT=//p' /etc/default/zlg)
 ip=$(hostname -I 2>/dev/null | cut -d' ' -f1)
 echo
+[ -s /var/lib/zlg-admin/mi-password ] ||
+	echo "Advanced page (MI Setup): set the PLC password once:  sudo zlg-admin --set-mi-password"
 if [ "$port" = 80 ]; then
 	echo "Done: http://${ip:-<board>}/ (the new server; ZLG's stays off)."
 else

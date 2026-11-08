@@ -2,7 +2,7 @@
 <?php
 /*
  * zlg-admin: the privileged side of the web interface's settings pages
- * (Wi-Fi, Modules). Runs as root outside /srv/zlg; the pages (PHP in
+ * (Wi-Fi, Modules, Advanced). Runs as root outside /srv/zlg; the pages (PHP in
  * zlg-web-fpm, www-data, chrooted) talk to it over a Unix socket:
  *
  *   zlg-admin.socket  /run/zlg/admin.sock (inside /srv/zlg: /m6g2c/run/admin.sock),
@@ -18,6 +18,7 @@
  *   zlg-admin --wifi-guard      at boot: undo a Wi-Fi change that was never
  *                               confirmed (power lost while it was tested)
  *   zlg-admin --reset-password  set the settings password back to "gateway"
+ *   zlg-admin --set-mi-password the PLC password for the Advanced page (stdin)
  */
 
 const STATE = '/var/lib/zlg-admin';	/* password, previous Wi-Fi files */
@@ -641,6 +642,206 @@ function op_modules_set(array $req): array
 	return ['changed' => true, 'count' => count($ids)];
 }
 
+/* ---- Advanced: inverter grid settings (NEP's misetup, 20230903) ------------
+ *
+ * NEP's own MI Setup page (HTML/JS from the 20230903 firmware, built into
+ * /srv/zlg/www/misetup-ui by zlg-web-port) talks to these instead of NEP's
+ * proxy.cgi, with the same replies. Reading needs no login; "setup mode"
+ * stops gateway-plc (the power-line modem serves one program) and starts it
+ * again after 10 idle minutes. Writing needs a login and ZLG_MI_WRITES=1 in
+ * /etc/default/zlg. The PLC password plc_set needs is kept on the board
+ * (STATE/mi-password, root only; zlg-admin --set-mi-password), so the page
+ * doesn't ask for it.
+ */
+
+const MI_IDLE = 600;		/* seconds of setup mode without a request */
+
+function mi_sn(): string
+{
+	$sn = @file_get_contents(gw() . '/sn');
+	preg_match('/^[A-Za-z_]+=(\S+)/m', (string)$sn, $m) || fail('the gateway serial number file is missing');
+	return $m[1];
+}
+
+function mi_pwd(): string
+{
+	$p = trim((string)@file_get_contents(STATE . '/mi-password'));
+	$p !== '' || fail('the PLC password is not set on this gateway (sudo zlg-admin --set-mi-password)');
+	return $p;
+}
+
+function mi_plc_pid(): string
+{
+	$pid = trim(run(['/usr/bin/pidof', '-s', 'gateway-plc']));
+	return ctype_digit($pid) ? $pid : '';
+}
+
+function mi_modcnt(): int
+{
+	$n = 0;
+	foreach (plcid_parse((string)@file_get_contents(gw() . '/plc_id.conf')) as $k => $v)
+		if ($k > 0 && plcid_value($v) !== '')
+			$n++;
+	return $n;
+}
+
+function mi_ini(string $file): array
+{
+	$r = [];
+	foreach (explode("\n", (string)@file_get_contents($file)) as $l)
+		if (($p = strpos($l, '=')) !== false)
+			$r[trim(substr($l, 0, $p))] = trim(substr($l, $p + 1));
+	return $r;
+}
+
+function mi_chroot(array $argv, int $timeout = 30): string
+{
+	return run(array_merge(['/usr/bin/timeout', (string)$timeout, '/usr/local/sbin/zlg-chroot',
+				'run', '/root/Gateway'], $argv));
+}
+
+/* setup mode: gateway-plc stopped, back on its own after MI_IDLE seconds */
+function mi_keep_setup(): void
+{
+	run(['/usr/bin/systemctl', 'stop', 'zlg-mi-resume-*.timer']);
+	run(['/usr/bin/systemd-run', '--quiet', '--collect', '--unit=zlg-mi-resume-' . bin2hex(random_bytes(4)),
+	     '--on-active=' . MI_IDLE, '/usr/bin/systemctl', 'start', 'zlg-plc.service']);
+}
+
+function op_mi_init(array $req): array
+{
+	$plc = mi_ini(gw() . '/plc.conf');
+	$eng = mi_ini(gw() . '/engineer.cfg');
+	$ver = json_decode(trim(mi_chroot(['./plc_set', '-j', '-v'], 15)), true);
+	$up = (int)(float)@file_get_contents('/proc/uptime');
+	$gwinfo = ['serial_number' => mi_sn(), 'modcnt' => (string)mi_modcnt()];
+	foreach (['', '_2', '_3', '_4', '_5', '_6', '_14'] as $sfx)
+		$gwinfo["ac_v_gain$sfx"] = $plc["AC_V_Gain$sfx"] ?? '';
+	$gwinfo['plcset_debug'] = $eng['plcset_debug'] ?? '0';
+	$gwinfo['reconn_time_offset'] = $plc['reconn_time_offset'] ?? '0';
+	$pid = mi_plc_pid();
+	return ['reply' => ['type' => '1',
+		'Proxy' => ['Ver' => 'zlg-admin', 'Date' => date('Y-m-d H:i:s', filemtime(__FILE__))],
+		'Setup' => is_array($ver) ? $ver : ['Ver' => '?', 'Date' => ''],
+		'Gateway' => $gwinfo,
+		'plc' => ['pid' => $pid, 'pids' => $pid],
+		'sys' => ['uptime' => sprintf('%d days %02d:%02d', intdiv($up, 86400), intdiv($up % 86400, 3600),
+					     intdiv($up % 3600, 60)), 'ref' => '']]];
+}
+
+function op_mi_find(array $req): array
+{
+	$pid = mi_plc_pid();
+	if ($pid === '')
+		mi_keep_setup();
+	return ['reply' => ['cnt' => $pid === '' ? '0' : $pid, 'pid' => $pid]];
+}
+
+function op_mi_setup(array $req): array
+{
+	$pid = mi_plc_pid();
+	run(['/usr/bin/systemctl', 'stop', 'zlg-plc.service']);
+	mi_keep_setup();
+	syslog(LOG_NOTICE, 'zlg-admin: MI setup mode: gateway-plc stopped (back after ' . MI_IDLE . ' idle seconds)');
+	return ['reply' => ['type' => '1', 'data' => "stop plc :$pid."]];
+}
+
+function op_mi_leave(array $req): array
+{
+	run(['/usr/bin/systemctl', 'stop', 'zlg-mi-resume-*.timer']);
+	run(['/usr/bin/systemctl', 'start', 'zlg-plc.service']);
+	syslog(LOG_NOTICE, 'zlg-admin: MI setup mode ended: gateway-plc started');
+	return ['reply' => ['type' => '1', 'data' => 'gateway-plc started; readings resume.']];
+}
+
+function mi_writes_on(): bool
+{
+	$d = mi_ini('/etc/default/zlg');
+	return ($d['ZLG_MI_WRITES'] ?? '0') === '1';
+}
+
+/* one command to one module: mod 1 (read: the command's settings all zero)
+   or mod 2 (write) */
+function op_mi_cmd(array $req): array
+{
+	$write = ($req['op'] ?? '') === 'mi.write';
+	$ind = (string)($req['ind'] ?? '');
+	$cmd = strtolower((string)($req['cmd'] ?? ''));
+	(ctype_digit($ind) && (int)$ind >= 1 && (int)$ind <= mi_modcnt())
+		|| fail('no such module');
+	preg_match('/^000[12][0-9a-f]{64}$/', $cmd) || fail('invalid command');
+	$isread = preg_match('/^000[12]0{64}$/', $cmd) === 1;
+	if ($write && !$isread) {
+		need_token($req);
+		mi_writes_on() || return_reply(['type' => '0', 'data' =>
+			'Writing settings is switched off on this gateway (ZLG_MI_WRITES in /etc/default/zlg).']);
+	} elseif (!$isread) {
+		fail('invalid command');
+	}
+	if (mi_plc_pid() !== '')
+		return ['reply' => ['type' => '0', 'data' => 'Enter Setup Mode First.']];
+	mi_keep_setup();
+	$out = trim(mi_chroot(['./plc_set', '-j', '-p', mi_pwd(), '-i', $ind, '-c', $cmd]));
+	if ($write && !$isread) {
+		$line = date('Y-m-d H:i:s') . " module $ind cmd $cmd reply $out\n";
+		file_put_contents(STATE . '/mi-writes.log', $line, FILE_APPEND);
+		syslog(LOG_NOTICE, "zlg-admin: MI settings written to module $ind: $cmd");
+	}
+	$r = json_decode($out, true);
+	return ['reply' => is_array($r) ? $r : ['type' => '0', 'data' => 'no answer from plc_set']];
+}
+
+class Reply extends Exception { public $reply; }
+function return_reply(array $r) { $e = new Reply(); $e->reply = $r; throw $e; }
+
+function op_mi_list(array $req): array
+{
+	$slots = plcid_parse((string)@file_get_contents(gw() . '/plc_id.conf'));
+	$data = [];
+	for ($n = 0; $n < 256; $n++) {
+		$v = plcid_value($slots[$n] ?? '');
+		$data[] = ['id' => (string)$n, 'data' => $v === '' ? '0' : $v];
+	}
+	return ['reply' => ['type' => '1', 'modnum' => (string)mi_modcnt(), 'data' => $data]];
+}
+
+function mi_dir(): string { return gw() . '/misetup'; }
+
+function mi_name_ok(string $n): bool
+{
+	return preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/', $n) && !str_contains($n, '..');
+}
+
+function op_mi_save_custom(array $req): array
+{
+	need_token($req);
+	$name = (string)($req['name'] ?? '');
+	mi_name_ok($name) || fail('a profile name is 1 to 40 letters, digits, ".", "_" or "-"');
+	$data = $req['data'] ?? null;
+	(is_array($data) && count($data) > 0 && count($data) <= 150) || fail('no settings sent');
+	$out = '';
+	foreach ($data as $k => $v) {
+		$v = trim((string)$v);
+		(preg_match('/^[a-z0-9_]{1,40}$/', (string)$k) && preg_match('/^-?\d{0,6}(\.\d{1,6})?$/', $v))
+			|| fail("invalid setting $k");
+		$out .= "$k=$v\n";
+	}
+	$dir = mi_dir() . '/setting/custom';
+	is_dir($dir) || fail('no custom profile folder');
+	put_atomic("$dir/$name.conf", $out, 0644);
+	syslog(LOG_NOTICE, "zlg-admin: MI custom profile $name saved");
+	return ['reply' => 'ok'];
+}
+
+function op_mi_set_profile(array $req): array
+{
+	need_token($req);
+	$name = (string)($req['name'] ?? '');
+	($name === '0' || mi_name_ok($name)) || fail('invalid profile name');
+	put_atomic(mi_dir() . '/para_profile.txt', $name, 0644);
+	return ['reply' => 'ok'];
+}
+
 /* ---- the request loop -------------------------------------------------- */
 
 const OPS = [
@@ -653,6 +854,15 @@ const OPS = [
 	'wifi.apply' => 'op_wifi_apply',
 	'modules.get' => 'op_modules_get',
 	'modules.set' => 'op_modules_set',
+	'mi.init' => 'op_mi_init',
+	'mi.find' => 'op_mi_find',
+	'mi.setup' => 'op_mi_setup',
+	'mi.leave' => 'op_mi_leave',
+	'mi.read' => 'op_mi_cmd',
+	'mi.write' => 'op_mi_cmd',
+	'mi.list' => 'op_mi_list',
+	'mi.save_custom' => 'op_mi_save_custom',
+	'mi.set_profile' => 'op_mi_set_profile',
 ];
 
 function serve(): void
@@ -665,6 +875,8 @@ function serve(): void
 		$op = $req['op'] ?? '';
 		isset(OPS[$op]) || fail('unknown request');
 		$r = ['ok' => true] + (OPS[$op])($req);
+	} catch (Reply $e) {
+		$r = ['ok' => true, 'reply' => $e->reply];
 	} catch (Fail $e) {
 		$r = ['ok' => false, 'error' => $e->getMessage()];
 	} catch (Throwable $e) {
@@ -702,6 +914,12 @@ try {
 		break;
 	case '--wifi-guard':
 		wifi_guard();
+		break;
+	case '--set-mi-password':
+		$p = trim((string)fgets(STDIN, 256));
+		preg_match('/^[0-9A-Za-z]{1,16}$/', $p) || fail('1 to 16 letters or digits');
+		put_atomic(STATE . '/mi-password', "$p\n", 0600);
+		echo "Saved.\n";
 		break;
 	case '--reset-password':
 		@unlink(password_file());
