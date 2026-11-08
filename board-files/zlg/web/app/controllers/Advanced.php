@@ -74,7 +74,8 @@ class Advanced extends CI_Controller {
 		case '1':
 		case '2':
 			return $this->call($in->post('mod') === '1' ? 'mi.read' : 'mi.write',
-				['ind' => (string)$in->post('ind'), 'cmd' => (string)$in->post('cmd')]);
+				['ind' => (string)$in->post('ind'), 'cmd' => (string)$in->post('cmd'),
+				 'enc' => (string)$in->post('enc')]);
 		case '3':
 			return $this->call('mi.find');
 		case '4':

@@ -7,11 +7,10 @@
  * proc_extend() in misetup/js/orig/proxy.js, ported here and checked against
  * NEP's JavaScript on the same replies), and writes a CSV and a PDF.
  *
- * For grid codes 6 and 7 (IEEE 1547A) firmware 20210303's MI Setup used
- * another encoding (as grid 1: 220 +- b*4/AC_V_Gain, f +- b/32). The 800B's
- * stored settings fit that one exactly (round values; 264 V = the
- * datasheet's upper limit) and the 2023 one not at all (-18 V, 74.4 Hz),
- * so the report gives the 2021 reading first and NEP's 2023 one after it.
+ * The 800B inverters (IDs 33xxxxxx) keep their settings in firmware
+ * 20210303's encoding instead (tested 2026-11-08; js/zlg-mi2021.js, which
+ * the Advanced page uses for them, describes it): for grid codes 1 and 6
+ * they are decoded that way (mi_decode_2021).
  */
 
 /* ---- NEP's tables (proc(), firmware 20230903), index = grid code - 1 --- */
@@ -54,17 +53,9 @@ const MI_BASIC = [
 	'minf3' => '5.FREQ_MIN_3 (Hz)', 'mintf3' => 'Time_FREQ_MIN_3 (s)',
 	'minf2' => '6.FREQ_MIN_2 (Hz)', 'mintf2' => 'Time_FREQ_MIN_2 (s)',
 	'minf' => '7.FREQ_MIN (Hz)', 'sminf' => '8.FREQ_START_MIN (Hz)',
-	'rect' => 'Reconnect Time (s)', 'pwr' => 'Power (W)', 'fref' => 'Freq offset',
+	'rect' => 'Reconnect Time (s)', 'pwr' => 'Power (W)', 'fref' => 'Freq offset', 'fcal' => 'Freq calibration (Hz)',
 	'suppressv_100' => 'Suppressing voltage 100 (V)', 'suppressv_200' => 'Suppressing voltage 200 (V)',
 	'antiland' => 'Anti-islanding', 'unbalance' => 'Unbalance',
-];
-const MI_OLD = [
-	'smaxv' => '1.VAC_START_MAX (V)', 'maxv' => '2.VAC_MAX (V)', 'maxv2' => '3.VAC_MAX_2 (V)',
-	'maxv3' => '4.VAC_MAX_3 (V)', 'minv3' => '5.VAC_MIN_3 (V)', 'minv2' => '6.VAC_MIN_2 (V)',
-	'minv' => '7.VAC_MIN (V)', 'sminv' => '8.VAC_START_MIN (V)',
-	'smaxf' => '1.FREQ_START_MAX (Hz)', 'maxf' => '2.FREQ_MAX (Hz)', 'maxf2' => '3.FREQ_MAX_2 (Hz)',
-	'maxf3' => '4.FREQ_MAX_3 (Hz)', 'minf3' => '5.FREQ_MIN_3 (Hz)', 'minf2' => '6.FREQ_MIN_2 (Hz)',
-	'minf' => '7.FREQ_MIN (Hz)', 'sminf' => '8.FREQ_START_MIN (Hz)',
 ];
 const MI_EXT = [
 	'flag_disable' => 'DISABLE OUTPUT', 'flag_gfdi' => 'DISABLE GFDI', 'flag_lvrt' => 'LVRT',
@@ -118,8 +109,9 @@ function mi_bytes(?string $data): ?array
 /* model parameters from the module ID's first two hex digits (proc()) */
 function mi_model(string $id, array $gains): array
 {
-	$m = ['gain' => 1.0, 'power_gain' => 2, 'mid' => 220, 'lv' => 0];
-	switch (strtoupper(substr(str_pad($id, 8, '0', STR_PAD_LEFT), 0, 2))) {
+	$p = strtoupper(substr(str_pad($id, 8, '0', STR_PAD_LEFT), 0, 2));
+	$m = ['gain' => 1.0, 'power_gain' => 2, 'mid' => 220, 'lv' => 0, 'enc2021' => $p === '33'];
+	switch ($p) {
 	case '00': $m['gain'] = $gains[0]; break;
 	case '10': $m['gain'] = $gains[1]; $m['power_gain'] = 4; break;
 	case '20': $m['gain'] = $gains[2]; $m['mid'] = 120; $m['lv'] = 1; break;
@@ -141,7 +133,9 @@ function mi_model(string $id, array $gains): array
 function mi_decode_basic(array $d, array $m, float $freq, float $reconn_offset): array
 {
 	$grid = $d[14] ?: 1;
-	$r = ['grid' => $grid];
+	if ($m['enc2021'] && in_array($grid, [1, 6], true))
+		return mi_decode_2021($d, $m, $freq, $reconn_offset);
+	$r = ['grid' => $grid, 'enc' => 'MI Setup 2023'];
 	if (!isset(MI_T['UP'][$grid - 1]))
 		return $r + ['error' => "grid code $grid is unknown to MI Setup"];
 	$g = $grid - 1;
@@ -226,21 +220,34 @@ function mi_decode_basic(array $d, array $m, float $freq, float $reconn_offset):
 	];
 }
 
-/* firmware 20210303's MI Setup for grids it handled like grid 1 (6, 7 among
-   them): 220 +- b*4/gain and f +- b/32, rounded as there */
-function mi_decode_old(array $d, array $m, float $freq): array
+/* firmware 20210303's encoding, which the 800B inverters use (grid codes 1
+   and 6; js/zlg-mi2021.js decode()): command byte k is reply byte (k^1)+8 */
+function mi_decode_2021(array $d, array $m, float $freq, float $reconn_offset): array
 {
+	$rb = fn(int $k) => $d[($k ^ 1) + 8];
 	$gn = $m['gain'];
-	$mid = $m['mid'];
-	$v = ['smaxv' => $mid + $d[38] * 4 / $gn, 'maxv' => $mid + $d[18] * 4 / $gn,
-	      'maxv2' => $mid + $d[20] * 4 / $gn, 'maxv3' => $mid + $d[22] * 4 / $gn,
-	      'minv3' => $mid - $d[23] * 4 / $gn, 'minv2' => $mid - $d[21] * 4 / $gn,
-	      'minv' => $mid - $d[19] * 4 / $gn, 'sminv' => $mid - $d[39] * 4 / $gn];
-	$f = ['smaxf' => $freq + $d[40] / 32, 'maxf' => $freq + $d[24] / 32, 'maxf2' => $freq + $d[26] / 32,
-	      'maxf3' => $freq + $d[28] / 32, 'minf3' => $freq - $d[29] / 32, 'minf2' => $freq - $d[27] / 32,
-	      'minf' => $freq - $d[25] / 32, 'sminf' => $freq - $d[41] / 32];
-	return array_map(fn($x) => js_fixed(js_round($x * 2) / 2, 1), $v) +
-	       array_map(fn($x) => js_fixed(js_round($x * 20) / 20, 2), $f);
+	$r = ['grid' => $d[14], 'enc' => '2021 (800B)'];
+	foreach (['smaxv' => 31, 'maxv' => 11, 'maxv2' => 13, 'maxv3' => 15] as $n => $k)
+		$r[$n] = js_fixed(220 + $rb($k) * 4 / $gn, 1);
+	foreach (['minv3' => 14, 'minv2' => 12, 'minv' => 10, 'sminv' => 30] as $n => $k)
+		$r[$n] = js_fixed(220 - $rb($k) * 4 / $gn, 1);
+	foreach (['smaxf' => 33, 'maxf' => 17, 'maxf2' => 19, 'maxf3' => 21] as $n => $k)
+		$r[$n] = js_fixed($freq + $rb($k) / 32, 2);
+	foreach (['minf3' => 20, 'minf2' => 18, 'minf' => 16, 'sminf' => 32] as $n => $k)
+		$r[$n] = js_fixed($freq - $rb($k) / 32, 2);
+	foreach ([22 => ['mintv2', 'mintv3'], 24 => ['maxtv2', 'maxtv3'], 26 => ['mintf2', 'mintf3'],
+		  28 => ['maxtf2', 'maxtf3']] as $k => [$fast, $slow]) {
+		$w = $rb($k) * 256 + $rb($k + 1);
+		$r[$fast] = js_fixed(($w >> 11) / 10, 1);
+		$r[$slow] = js_fixed(($w & 0x7ff) / 10, 1);
+	}
+	$c = $d[15] > 127 ? $d[15] - 256 : $d[15];
+	return $r + [
+		'rect' => (string)((float)js_fixed(js_round($d[16] * 2.048 * 0.4) / 0.4, 0) + $reconn_offset),
+		'pwr' => (string)($d[17] * 4),
+		'fcal' => ($c >= 0 ? '+' : '') . js_fixed($c / 32, 3),
+		'version' => sprintf('%02x%02x', $d[8], $d[9]),
+	];
 }
 
 /* proc_extend(), for one extended (0002) reply */
@@ -313,20 +320,17 @@ function mi_label(array $meta, string $n): string
 
 function mi_report_csv(array $meta, array $mods): string
 {
-	$head = ['Module', 'ID', 'Basic read', 'Extended read', 'Version'];
-	foreach (MI_OLD as $k => $n)
-		$head[] = mi_label($meta, $n) . ' [2021 encoding; grid 6/7]';
+	$head = ['Module', 'ID', 'Basic read', 'Extended read', 'Version', 'Encoding'];
 	foreach (MI_BASIC as $k => $n)
-		$head[] = mi_label($meta, $n) . ($k === 'grid' ? '' : ' [MI Setup 2023]');
+		$head[] = mi_label($meta, $n);
 	foreach (MI_EXT as $k => $n)
 		$head[] = $n;
 	$head[] = 'Raw basic (0001)';
 	$head[] = 'Raw extended (0002)';
 	$out = mi_csv_line($head);
 	foreach ($mods as $m) {
-		$row = [$m['n'], $m['id'], $m['basic_state'], $m['ext_state'], $m['basic']['version'] ?? ''];
-		foreach (MI_OLD as $k => $n)
-			$row[] = $m['old'][$k] ?? '';
+		$row = [$m['n'], $m['id'], $m['basic_state'], $m['ext_state'], $m['basic']['version'] ?? '',
+			$m['basic']['enc'] ?? ''];
 		foreach (MI_BASIC as $k => $n)
 			$row[] = $k === 'grid' && isset($m['basic']['grid'])
 				? $m['basic']['grid'] . ' ' . (MI_GRIDS[$m['basic']['grid']] ?? '')
@@ -469,17 +473,16 @@ function mi_report_pdf(array $meta, array $mods): string
 		'Grid frequency' => $meta['freq'] === null
 			? 'unknown (no recent readings): frequency limits are shown as offsets from nominal'
 			: $meta['freq'] . ' Hz nominal, ' . $meta['freq_src'],
-		'Decoding' => "as firmware 20230903's MI Setup page shows the settings, and for grid codes",
-		'' => "6 and 7 also in firmware 20210303's encoding (see below)",
+		'Decoding' => "as the Advanced page shows the settings (see below)",
 	] as $k => $v)
 		$p->line(str_pad($k === '' ? '' : "$k:", 17) . $v);
 	$p->line();
 	foreach ([
-		'Grid codes 6 and 7 (IEEE 1547A): firmware 20210303\'s MI Setup encoded their voltages and',
-		'frequencies as 220 +- b x 4 / AC_V_Gain V and f +- b / 32 Hz; firmware 20230903\'s uses fixed',
-		'offsets instead. NEP\'s 800B inverters hold values that fit the 2021 encoding exactly (round',
-		'numbers; 264 V is the datasheet\'s upper limit) and read as impossible values in the 2023 one',
-		'(e.g. -18 V, 74.4 Hz), so the 2021 reading comes first. NEP has not confirmed either.',
+		'NEP\'s 800B inverters (IDs 33xxxxxx) keep their settings in the encoding of firmware 20210303\'s',
+		'MI Setup, not 20230903\'s (a trip limit written on 2026-11-08 tripped as the 2021 encoding reads',
+		'it). On grid codes 1 and 6 they are decoded that way: 220 +- b x 4 / AC_V_Gain V, nominal +-',
+		'b / 32 Hz, trip times as (fast x 10) << 11 | (slow x 10), reconnect time b x 2.048 s. Other',
+		'models and grid codes: as MI Setup 20230903 decodes them.',
 		'Raw replies are at the end and in the CSV file.',
 	] as $l)
 		$p->line($l);
@@ -493,7 +496,6 @@ function mi_report_pdf(array $meta, array $mods): string
 		$sig = json_encode([$m['basic'], $m['ext']]);
 		$groups[$sig]['n'][] = $m['n'];
 		$groups[$sig]['basic'] = $m['basic'];
-		$groups[$sig]['old'] = $m['old'];
 		$groups[$sig]['ext'] = $m['ext'];
 	}
 	$groups = array_values($groups);
@@ -511,11 +513,7 @@ function mi_report_pdf(array $meta, array $mods): string
 	$p->line();
 	for ($i = 0; $i < count($groups); $i += 4) {
 		$set = array_slice($groups, $i, 4);
-		$old = array_values(array_filter($set, fn($g) => in_array((int)($g['basic']['grid'] ?? 0), [6, 7], true)));
-		if ($old)
-			mi_table($p, 'Grid 6/7 voltages and frequencies, 2021 encoding (fits the stored values)', MI_OLD, $old, 'old', $meta);
-		mi_table($p, $old ? 'Basic settings as MI Setup 20230903 shows them (grid 6/7 voltages and frequencies: see above)'
-				   : 'Basic settings (MI Setup 20230903)', MI_BASIC, $set, 'basic', $meta);
+		mi_table($p, 'Basic settings', ['enc' => 'Encoding'] + MI_BASIC, $set, 'basic', $meta);
 		$ext = array_values(array_filter($set, fn($g) => $g['ext']));
 		if ($ext)
 			mi_table($p, 'Extended settings (IEEE 1547 / Rule 21 functions)', MI_EXT, $ext, 'ext', $meta);

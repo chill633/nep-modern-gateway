@@ -772,13 +772,33 @@ checks every request itself; the pages reach it over a socket
     `/var/lib/zlg-admin/mi-writes.log`). Wrong values can make the
     inverters disconnect from the grid or run outside what the utility
     allows; read every module first and keep the replies as a baseline.
-  * **Grid codes 6 and 7 are never written to 800B inverters** (IDs
-    starting `33`), whatever `ZLG_MI_WRITES` says. NEP's 2021 and 2023 MI
-    Setup pages encode these grid codes differently, and the settings in
-    the 800B inverters fit the 2021 encoding exactly (round values, 264 V
-    being the datasheet's upper limit) while the 2023 page shows them as
-    impossible ones (-18 V, 74.4 Hz). A write from the 2023 page could set
-    other trip limits than the ones it shows.
+  * **800B inverters (IDs starting `33`) are read and written in NEP's
+    2021 encoding** on grid codes 6 and 1 (`js/zlg-mi2021.js`, served at
+    `/zlg-web/local/`). NEP's 2021 and 2023 MI Setup pages encode these
+    grid codes differently; the 800B's stored settings fit the 2021
+    encoding (round values; the 2023 page shows -18 V and 74.4 Hz), and a
+    one-inverter test confirmed it: a 236 V over-voltage limit written in
+    the 2021 encoding tripped the inverter at a 242 V grid. The 2021
+    encoding holds 161.5 to 278.5 V (220 V &plusmn; byte &times; 4 / 17.447),
+    the nominal frequency &plusmn; 7.9 Hz (1/32 Hz steps), fast trip times up
+    to 3.1 s and slow ones up to 204.7 s (0.1 s steps, rounded down) and
+    the reconnect time in 2.048 s steps. A value outside that is refused
+    with the allowed range, not changed; rounded values are listed under
+    Inverter Output.
+  * **Check a module before Set**: an 800B write starts from the module's
+    last reply and changes only the checked fields. It never sends the
+    frequency calibration (command byte 6, which the inverter takes as the
+    actual grid frequency and recalibrates its reading to). `zlg-admin`
+    refuses 800B writes that don't come from the page's 2021 encoder, with
+    another grid code or with a calibration byte, whatever `ZLG_MI_WRITES`
+    says.
+  * **An 800B inverter stops producing for about 5 minutes after each read
+    or write** (its reconnect time); the settings don't change.
+  * `sudo zlg-admin --mi-calibrate MODULE OFFSET` sets one module's
+    frequency calibration (OFFSET in 1/32 Hz, as the reply shows it) and
+    writes its other settings back unchanged. It needs a minute reading
+    from the last 5 minutes, stops `gateway-plc` while it runs, checks the
+    result by reading back (up to 3 tries) and logs like a write.
   * **Generate Grid Report** (needs the settings password) reads every
     module's settings (about 5 seconds per module, no readings meanwhile;
     `gateway-plc` starts again afterwards) and offers a `.tgz` with a CSV
@@ -787,11 +807,10 @@ checks every request itself; the pages reach it over a socket
     frequency limits are offsets from the nominal grid frequency, which the
     report takes from the frequency the inverters measure (their last
     minute readings, rounded to 50 or 60 Hz), else from the grid code;
-    without either it shows the offsets. For grid codes 6 and 7 the
-    voltages and frequencies come first in firmware 20210303's encoding,
-    which fits the 800B's stored values, then as firmware 20230903's MI
-    Setup shows them; other settings are decoded as the 2023 page does.
-    Meters (IDs starting `FF`) are skipped.
+    without either it shows the offsets. Settings are decoded as the
+    Advanced page shows them (800B inverters in the 2021 encoding, with
+    trip and reconnect times and the frequency calibration); an "Encoding"
+    row/column says which. Meters (IDs starting `FF`) are skipped.
   * Only firmware 20230903's MI Setup is built. **Firmware 20210303's
     doesn't know the 800B inverters (IDs starting `33`)**: it would encode
     the voltage trips about 17 times too low and the power limit doubled.

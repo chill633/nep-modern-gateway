@@ -502,6 +502,8 @@ if ($mi_ok) {
 			$js('/javascript/jquery/jquery.min.js') . "\n    " . $js('/zlg-web/js/jquery-migrate.min.js') .
 			"\n    <script type=\"text/javascript\">$.ajaxSetup({ headers: { \"X-Csrf-Token\": \"<?php echo htmlspecialchars(\$csrf, ENT_QUOTES); ?>\" } });</script>",
 		'~<script[^>]*src="js/blockUI\.js"[^>]*>\s*</script>~' => $js('/zlg-web/js/jquery.blockUI.js'),
+		/* the 800B inverters' own encoding (js/zlg-mi2021.js), after NEP's code */
+		'~(<script[^>]*src="js/_mi\.js"[^>]*>\s*</script>)~' => '$1' . "\n    " . $js('/zlg-web/local/zlg-mi2021.js'),
 		/* the PLC password comes from the gateway (zlg-admin) */
 		'~<label for="pwd">[^<]*</label>\s*<input type="password"[^>]*id="pwd"[^>]*>~' =>
 			'<input type="hidden" id="pwd" name="pwd" value="gateway">',
