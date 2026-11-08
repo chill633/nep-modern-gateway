@@ -380,7 +380,9 @@ tested on the New unit (.239); README 7a "Settings pages" documents them.
 - NEP's originals (identical in both firmwares except misetup):
   /wifi (own password, default "gateway", MD5 in vtwifi/wlan.pwd; edits
   vtwifi/wpa.conf, which Debian ignores), /module (singular; no login;
-  plc_id.conf + plc_phase.conf), /misetup. The kit serves none of them.
+  plc_id.conf + plc_phase.conf), /misetup. The kit serves none of them;
+  lighttpd.conf redirects (301) /wifi, /module(s), /misetup (and anything
+  under them) to /nep/wifi, /nep/modules, /nep/advanced.
 - board-files/zlg/web/admin/zlg-admin: root helper (PHP CLI) behind
   zlg-admin.socket (/run/zlg/admin.sock = /m6g2c/run/admin.sock in the
   chroot, group www-data, Accept=yes -> zlg-admin@.service, one JSON line

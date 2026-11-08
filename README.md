@@ -655,7 +655,8 @@ and PHP 8.4, kept up to date by apt, while NEP's pages stay as they are:
   and 1.9, Highcharts 2, simpletooltip, Modernizr, poshytip) are still in
   `nep/static/js/` but lighttpd refuses them (403), so no page can load them.
 * NEP's separate settings pages (`/wifi`, `/module`, `/misetup`) aren't
-  served; the kit's own versions are in the menu (below). ZLG's server,
+  served; their addresses redirect to the kit's own versions in the menu
+  (below). ZLG's server,
   which served NEP's, is switched off.
 
 This is installed and running on port 80 on the 20210303 gateway. The steps
