@@ -791,6 +791,17 @@ function op_mi_cmd(array $req): array
 			'Writing settings needs NEP firmware 20230903 or later on this gateway.']);
 		mi_writes_on() || return_reply(['type' => '0', 'data' =>
 			'Writing settings is switched off on this gateway (ZLG_MI_WRITES in /etc/default/zlg).']);
+		/* the 800B's stored grid 6/7 settings fit firmware 20210303's
+		   encoding (220 +- b*4/gain, f +- b/32), not this MI Setup's (which
+		   reads them as -18 V and 74.4 Hz): a write in this page's encoding
+		   could set other trip limits than the ones shown */
+		$slots = plcid_parse((string)@file_get_contents(gw() . '/plc_id.conf'));
+		$id = str_pad(plcid_value($slots[(int)$ind] ?? ''), 8, '0', STR_PAD_LEFT);
+		if (str_starts_with($cmd, '0001') && str_starts_with($id, '33') &&
+		    in_array(hexdec(substr($cmd, 14, 2)), [6, 7], true))
+			return_reply(['type' => '0', 'data' => 'Not written: grid codes 6 and 7 are blocked for 800B ' .
+				'inverters (IDs starting 33), because this page encodes them differently from the ' .
+				'settings the inverters hold. See the grid report.']);
 	} elseif (!$isread) {
 		fail('invalid command');
 	}
