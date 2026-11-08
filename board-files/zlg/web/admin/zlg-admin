@@ -530,6 +530,116 @@ function wifi_guard(): void
 	run(['/usr/bin/sync']);
 }
 
+/* ---- Modules: the inverter and meter IDs (plc_id.conf) ---------------------- */
+
+/* where NEP's files are; ZLG_ADMIN_GW points elsewhere for tests (root, from
+   the command line only: the socket's service has a fixed environment) */
+function gw(): string { return getenv('ZLG_ADMIN_GW') ?: GW; }
+
+/* plc_id.conf: InverterN=0x<hex>, N from 0 (the gateway, FFFF) to 255 */
+function plcid_parse(string $conf): array
+{
+	$slots = [];
+	foreach (explode("\n", $conf) as $l)
+		if (preg_match('/^Inverter(\d+)=(.*)$/', trim($l), $m))
+			$slots[(int)$m[1]] = trim($m[2]);
+	ksort($slots);
+	return $slots;
+}
+
+function plcid_value(string $v): string	/* "0x33AB..." -> "33AB...", "0x" -> "" */
+{
+	$v = strtoupper(preg_replace('/^0X/i', '', trim($v)));
+	return ltrim($v, '0');
+}
+
+function op_modules_get(array $req): array
+{
+	$f = gw() . '/plc_id.conf';
+	is_file($f) || fail('plc_id.conf is missing');
+	$slots = plcid_parse((string)file_get_contents($f));
+	$ids = [];
+	foreach ($slots as $n => $v)
+		if ($n > 0)
+			$ids[$n] = plcid_value($v);
+	while ($ids && end($ids) === '')
+		array_pop($ids);
+	$eng = @parse_ini_file(gw() . '/engineer.cfg', false, INI_SCANNER_RAW) ?: [];
+	return ['ids' => array_values($ids), 'slots' => max(0, count($slots) - 1),
+		'phase_3' => ($eng['phase_3'] ?? '0') === '1',
+		'modcount' => trim((string)@file_get_contents(gw() . '/modcount'))];
+}
+
+$after_reply = null;	/* run once the reply is sent (a restart) */
+
+function op_modules_set(array $req): array
+{
+	global $after_reply;
+	need_token($req);
+	$f = gw() . '/plc_id.conf';
+	is_file($f) || fail('plc_id.conf is missing');
+	$conf = (string)file_get_contents($f);
+	$slots = plcid_parse($conf);
+	isset($slots[0]) || fail('plc_id.conf has no Inverter0 line');
+	$max = count($slots) - 1;
+
+	$in = $req['ids'] ?? null;
+	is_array($in) || fail('no IDs sent');
+	$ids = [];
+	foreach (array_values($in) as $i => $v) {
+		$v = strtoupper(trim((string)$v));
+		$n = $i + 1;
+		if ($v === '') {
+			$ids[] = '';
+			continue;
+		}
+		/* a whole serial number (21508-0005F123-U) or its ID part */
+		if (preg_match('/^\w{5}-([0-9A-F]{8})-\w$/', $v, $m))
+			$v = $m[1];
+		preg_match('/^[0-9A-F]{1,8}$/', $v)
+			|| fail("module $n: an ID is 1 to 8 hex digits (0-9, A-F), or a serial number like 21508-0005F123-U");
+		$v = ltrim($v, '0');
+		$v !== '' || fail("module $n: the ID can't be 0");
+		$ids[] = $v;
+	}
+	while ($ids && end($ids) === '')
+		array_pop($ids);
+	foreach ($ids as $i => $v)
+		$v !== '' || fail('module ' . ($i + 1) . ' is empty: the list must not have gaps');
+	count($ids) <= $max || fail("at most $max modules");
+	$dup = array_diff_assoc($ids, array_unique($ids));
+	if ($dup) {
+		$v = reset($dup);
+		fail("ID $v is in the list twice (modules " . implode(' and ',
+			array_map(fn($k) => $k + 1, array_keys($ids, $v))) . ')');
+	}
+
+	$lines = ['Inverter0=' . $slots[0]];
+	for ($n = 1; $n <= $max; $n++)
+		$lines[] = "Inverter$n=0x" . ($ids[$n - 1] ?? '');
+	$new = implode("\n", $lines) . (str_ends_with($conf, "\n") ? "\n" : '');
+	if ($new === $conf)
+		return ['changed' => false];
+
+	$bak = STATE . '/modules';
+	@mkdir($bak, 0700);
+	copy($f, "$bak/plc_id.conf." . date('Ymd-His')) || fail('cannot back up plc_id.conf');
+	$old = glob("$bak/plc_id.conf.*");
+	sort($old);
+	foreach (array_slice($old, 0, -10) as $o)
+		unlink($o);
+	put_atomic($f, $new, fileperms($f) & 0777);
+	syslog(LOG_NOTICE, 'zlg-admin: plc_id.conf saved, ' . count($ids) . ' modules; restarting the gateway software');
+	/* NEP's programs read the list when they start: restart them the way
+	   NEP's own "reboot" does (zlg-restart.path restarts zlg.target) */
+	if (gw() === GW)
+		$after_reply = function () {
+			sleep(1);
+			touch('/run/zlg/restart');
+		};
+	return ['changed' => true, 'count' => count($ids)];
+}
+
 /* ---- the request loop -------------------------------------------------- */
 
 const OPS = [
@@ -540,6 +650,8 @@ const OPS = [
 	'wifi.status' => 'op_wifi_status',
 	'wifi.scan' => 'op_wifi_scan',
 	'wifi.apply' => 'op_wifi_apply',
+	'modules.get' => 'op_modules_get',
+	'modules.set' => 'op_modules_set',
 ];
 
 function serve(): void
@@ -559,6 +671,12 @@ function serve(): void
 		$r = ['ok' => false, 'error' => 'internal error'];
 	}
 	fwrite(STDOUT, json_encode($r, JSON_INVALID_UTF8_SUBSTITUTE) . "\n");
+	fflush(STDOUT);
+	global $after_reply;
+	if ($after_reply) {
+		fclose(STDOUT);
+		($after_reply)();
+	}
 }
 
 openlog('zlg-admin', LOG_PID, LOG_DAEMON);
