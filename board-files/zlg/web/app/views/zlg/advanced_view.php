@@ -11,17 +11,26 @@
   <ul style="margin:6px 0 0 18px;padding:0">
     <li><b>Check</b> reads the selected modules. It first enters <b>setup mode</b>: the gateway stops polling
       the inverters (no new readings) until you press <b>Leave Setup Mode</b>, or by itself after 10 minutes
-      without a request. The inverters answer only while they produce (daylight).</li>
+      without a request. The inverters answer only while they produce (daylight). An 800B inverter stops
+      producing for about 5 minutes (its reconnect time) after each read or write.</li>
     <li><b>Set</b> writes the settings shown to the selected modules. Wrong values can make the inverters
       disconnect from the grid or run outside what your utility allows: change them only with the values
       your interconnection agreement requires, and try one module first.</li>
+    <li><b>800B inverters</b> (IDs starting 33) keep their settings in the encoding of NEP's older MI Setup
+      (2021), not this page's: for them the page reads and writes in that encoding, on grid codes 6
+      (1547.1 240/120V) and 1. It holds 161.5 to 278.5 V, nominal &plusmn; 7.9 Hz, fast trip times up to 3.1 s
+      and slow ones up to 204.7 s, in 0.1 s steps (rounded down). A value outside that is refused, not
+      changed. Check a module before Set: a write keeps the module's current values for the fields that
+      aren't checked. The page shows the NEP range hints of its own encoding; the messages under
+      Inverter Output give the decoded 2021 values.</li>
     <li>The password field of NEP's page isn't needed: the gateway fills it in.</li>
   </ul>
 </div>
 <div class="zlg-box zlg-form" id="report">
   <b>Grid report.</b> Reads every inverter's settings and gives a .tgz file with a CSV and a PDF of them
-  (decoded as NEP's MI Setup page shows them, with the raw replies). It takes about 10 seconds per module;
-  the gateway has no new readings meanwhile, and the inverters answer only while they produce.
+  (decoded as this page shows them, 800B inverters in their 2021 encoding, with the raw replies). It takes about 10 seconds per module;
+  the gateway has no new readings meanwhile, the inverters answer only while they produce, and each one
+  stops producing for about 5 minutes after it is read.
   <div class="row" style="margin-top:8px">
 <?php if ($logged_in): ?>
     <button class="zlg-btn" type="button" id="rstart">Generate Grid Report</button>

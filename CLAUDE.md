@@ -356,13 +356,55 @@ was run and the copies were deleted.
   the window 211-264 Vac / 59.3-60.5 Hz (adjustable), UL 1741-SA/SB; the
   BDM-600x manual has no trip table; manualshive/manuals.online blocked.
   The 2023 reading is physically impossible (-18 V, 74.4 Hz), the 2021
-  one plausible (264 V = the datasheet maximum), so: zlg-admin refuses
-  basic (0001) writes with grid byte (cmd byte 7) 6 or 7 to IDs starting
-  33, even with ZLG_MI_WRITES=1 (tested with writes on and gateway-plc
-  running: refused; a grid-1 command got past the block to "Enter Setup
-  Mode First"); the grid report lists the 2021 reading first. Still
-  unconfirmed: the 220 V midpoint and the timing bytes (30-37, all 01 08);
-  a one-inverter test was judged unsafe.
+  one plausible (264 V = the datasheet maximum). Settled by the test below.
+
+## 800B 2021 encoding: test, page, calibration (2026-11-08)
+
+- One-inverter test (user approved, module 3; tool /tmp/mitest.php on .239,
+  gone after reboot): byte 0x46 in OV1 (cmd byte 15) = 236.05 V in the 2021
+  encoding tripped the inverter with error 0x40 (AC RMS over) at a 242 V
+  grid. The 800B (IDs 33) use the 2021 encoding. Error codes are hex bit
+  flags (BDG-256 manual 7.6: bit 4 freq over, bit 6 AC RMS over, bit 15
+  PLC comm).
+- Encoding: V = 220 +- b*4/17.447 (161.5-278.5 V; an under-limit must be
+  below 220 V); f = nominal +- b/32 Hz; trip times one 16-bit word per
+  pair, (fast*10)<<11 | (slow*10) (fast <= 3.1 s, slow <= 204.7 s, 0.1 s
+  floor); reconnect stored byte * 2.048 s, and the inverter stores the
+  sent byte + 16 (write c[9] = r[16] - 16); power b*4 W. Reply byte
+  (k^1)+8 holds command byte k (pairs swapped). Command byte 6
+  ("Freq_cal_offset") is taken as the actual grid frequency 59 + b/32 Hz:
+  the inverter recalibrates its reading (reply byte 15, signed 1/32 Hz)
+  to match. Resending it from a reply is what moved module 3's
+  calibration during the test; never send it except to calibrate.
+- Current settings (2021 reading, modules 3-22): OV 259.9/264 V, UV 170 V
+  (1/2: VAC_MIN/START_MIN 180.1 V), OF 61.5/64.5 Hz, UF 58.31/55.5 Hz,
+  **all trip times 0.1 s**, reconnect 300 s, 760 W, calibration +10/32 Hz,
+  grid 6; extended: FREQ-WATT and VAR-CTRL off, V_Norm 230. The grid
+  reaches 250 V; natural 0x40 trips seen at ~247 V.
+- **Each read (0001 + zeros) or write takes an 800B offline ~5 min**
+  (status 8B01, then its 300 s reconnect). Settings unchanged.
+- Kit: js/zlg-mi2021.js (window.zlgMi2021; added to misetup index.html by
+  zlg-web-port after _mi.js) wraps NEP's proc()/mwrite() for ID 33 on
+  grid 1/6: decodes into the form, encodes from the last reply + checked
+  fields, refuses out-of-range values, notes rounding, posts enc=2021.
+  zlg-admin accepts 0001 writes to IDs 33 only with enc=2021, grid byte 1
+  or 6 and byte 6 = 00. mi-report.php decodes them the same way
+  (mi_decode_2021; "Encoding" row/column; the separate 2021 columns are
+  gone). `zlg-admin --mi-calibrate MODULE OFFSET` (1/32 Hz) restored
+  module 3 to +10/32 Hz on the first try (min.dat is local time:
+  local_tz()). Verified live: Check of 3/4 through the page; offline: the
+  JS encoder reproduces the restore command and the PHP decoder equals
+  the JS one. **No write through the page yet; ZLG_MI_WRITES still 0.**
+- Utility profile (local only: ~/Working/nep-local/grid-settings/, CFF v2.0
+  -> NEP field mapping, names the utility, never commit): can't encode
+  OV2 288 V, UV2 120 V, OF1/UF1 300 s, ES_V_LOW 220.08 V; NEP's volt-var
+  curve is symmetric (utility Q4 -0.44 with Q1 0 impossible); no
+  randomized delay. Open for the user: which profile within the limits,
+  a deviation request to the utility. Performance categories (III/B) are
+  a classification, not a setting; NEP's ATM certificate
+  (201026118GZU-001, in ~/Working/Reference) lists UL 1741 SB,
+  IEEE 1547-2018, 1547.1-2020. The user is the installer. The volt-var
+  open-loop delay is the first VAR-CTRL row (0-400 s).
 
 ## Production moved to the New unit (2026-11-06)
 
@@ -506,8 +548,9 @@ tested on the New unit (.239); README 7a "Settings pages" documents them.
   22 modules, 1034 fields, 0 differences (pwr/fref exist only in NEP's
   debug mode, not compared). Output /run/zlg-admin/mi-report.tgz (CSV +
   hand-written Courier PDF, landscape Letter). While it runs, MI Setup's
-  setup/leave/read/write are refused. Grid 6/7 get the 2021-encoding
-  columns first (PDF table and CSV columns), then NEP's 2023 reading. Live runs: 22 of 25 answered (23/24 no answer, 25 meter
+  setup/leave/read/write are refused. 800B inverters on grid 1/6 are
+  decoded in the 2021 encoding (see "800B 2021 encoding" below), others
+  as NEP's 2023 page. Live runs: 22 of 25 answered (23/24 no answer, 25 meter
   skipped); gateway-plc restarted after. Reports contain module
   IDs: never commit one.
 - Browser checks: headless Firefox via /snap/bin/geckodriver and a small

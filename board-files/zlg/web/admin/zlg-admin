@@ -20,6 +20,9 @@
  *   zlg-admin --reset-password  set the settings password back to "gateway"
  *   zlg-admin --set-mi-password the PLC password for the Advanced page (stdin)
  *   zlg-admin --mi-report-job   read all modules, write the grid report (systemd-run)
+ *   zlg-admin --mi-calibrate N OFFSET
+ *                               set an 800B inverter's frequency calibration
+ *                               (module N, OFFSET in 1/32 Hz, e.g. 10)
  */
 
 const STATE = '/var/lib/zlg-admin';	/* password, previous Wi-Fi files */
@@ -764,6 +767,12 @@ function op_mi_leave(array $req): array
 	return ['reply' => ['type' => '1', 'data' => 'gateway-plc started; readings resume.']];
 }
 
+function mi_id(int $ind): string
+{
+	$slots = plcid_parse((string)@file_get_contents(gw() . '/plc_id.conf'));
+	return strtoupper(str_pad(plcid_value($slots[$ind] ?? ''), 8, '0', STR_PAD_LEFT));
+}
+
 function mi_writes_on(): bool
 {
 	$d = mi_ini('/etc/default/zlg');
@@ -791,17 +800,20 @@ function op_mi_cmd(array $req): array
 			'Writing settings needs NEP firmware 20230903 or later on this gateway.']);
 		mi_writes_on() || return_reply(['type' => '0', 'data' =>
 			'Writing settings is switched off on this gateway (ZLG_MI_WRITES in /etc/default/zlg).']);
-		/* the 800B's stored grid 6/7 settings fit firmware 20210303's
-		   encoding (220 +- b*4/gain, f +- b/32), not this MI Setup's (which
-		   reads them as -18 V and 74.4 Hz): a write in this page's encoding
-		   could set other trip limits than the ones shown */
-		$slots = plcid_parse((string)@file_get_contents(gw() . '/plc_id.conf'));
-		$id = str_pad(plcid_value($slots[(int)$ind] ?? ''), 8, '0', STR_PAD_LEFT);
-		if (str_starts_with($cmd, '0001') && str_starts_with($id, '33') &&
-		    in_array(hexdec(substr($cmd, 14, 2)), [6, 7], true))
-			return_reply(['type' => '0', 'data' => 'Not written: grid codes 6 and 7 are blocked for 800B ' .
-				'inverters (IDs starting 33), because this page encodes them differently from the ' .
-				'settings the inverters hold. See the grid report.']);
+		/* the 800B inverters (IDs 33...) keep their basic settings in
+		   firmware 20210303's encoding, not the one of the MI Setup page
+		   this kit serves (tested 2026-11-08): the page writes them through
+		   js/zlg-mi2021.js, which marks its writes; anything else, and any
+		   frequency calibration (byte 6: the inverter takes it as the actual
+		   grid frequency and recalibrates), is refused */
+		if (str_starts_with($cmd, '0001') && str_starts_with(mi_id((int)$ind), '33')) {
+			($req['enc'] ?? '') === '2021' || return_reply(['type' => '0', 'data' =>
+				'Not written: 800B inverters need the 2021 encoding; reload the Advanced page.']);
+			in_array(hexdec(substr($cmd, 14, 2)), [1, 6], true) || return_reply(['type' => '0', 'data' =>
+				'Not written: 800B inverters are written only with grid code 6 (1547.1 240/120V) or 1.']);
+			substr($cmd, 12, 2) === '00' || return_reply(['type' => '0', 'data' =>
+				'Not written: the frequency calibration is set with zlg-admin --mi-calibrate.']);
+		}
 	} elseif (!$isread) {
 		fail('invalid command');
 	}
@@ -884,9 +896,7 @@ function op_mi_report_get(array $req): array
 function mi_report_job(): void
 {
 	require MI_REPORT_LIB;
-	$tz = @readlink('/etc/localtime');
-	if ($tz && preg_match('~zoneinfo/(.+)$~', $tz, $m))
-		@date_default_timezone_set($m[1]);
+	local_tz();
 	$st = json_file(RUN . '/mi-report.json');
 	$id = $st['id'] ?? '';
 	$ids = [];
@@ -967,7 +977,6 @@ function mi_report_job(): void
 			'basic_state' => isset($r['skip']) ? 'not read' : ($b ? 'ok' : 'no answer'),
 			'ext_state' => isset($r['skip']) ? 'meter' : ($e ? 'ok' : 'no answer'),
 			'basic' => $basic,
-			'old' => $b && in_array($basic['grid'] ?? 0, [6, 7], true) ? mi_decode_old($b, $model, $freq ?? 0.0) : [],
 			'ext' => $e ? mi_decode_ext($e) : [],
 			'raw_basic' => $r['basic'] ?? null, 'raw_ext' => $r['ext'] ?? null,
 		];
@@ -993,6 +1002,87 @@ function mi_report_job(): void
 	mi_report_status(['id' => $id, 'state' => 'done', 'name' => "$base.tgz", 'file' => $tgz,
 			  'done' => $total, 'total' => $total, 'read_ok' => $ok,
 			  'message' => "$ok of $total modules answered"]);
+}
+
+/* ---- frequency calibration of an 800B inverter ---------------------------
+ * The basic command's byte 6 is the actual grid frequency, 59 + b/32 Hz: the
+ * inverter sets its calibration (reply byte 15, signed, 1/32 Hz) so that it
+ * reads that. So: raw = its last reading - its calibration, and b for the
+ * wanted calibration follows. The write repeats every other setting from the
+ * module's reply (the reconnect byte is stored as sent + 16), as the
+ * Advanced page does; up to 3 tries, as the reading drifts. */
+function mi_calibrate(int $ind, int $want): void
+{
+	str_starts_with(mi_id($ind), '33') || fail("module $ind isn't an 800B inverter (ID 33...)");
+	($want >= -100 && $want <= 100) || fail('the calibration is -100 to 100 (1/32 Hz)');
+	mi_report_busy_cli();
+	local_tz();
+	$f = preg_split('/\s+/', mi_last_line(gw() . "/data/$ind/min.dat"));
+	(count($f) >= 7 && ($t = strtotime("$f[0] $f[1]")) && time() - $t < 300 && $f[6] > 40)
+		|| fail("module $ind has no reading from the last 5 minutes (it must be producing)");
+	$shown = (float)$f[6];
+	$was_running = mi_plc_pid() !== '';
+	run(['/usr/bin/systemctl', 'stop', 'zlg-plc.service']);
+	mi_keep_setup();
+	try {
+		$r = mi_bytes_read($ind);
+		$raw = $shown - mi_signed($r[15]) / 32;
+		printf("module %d: reads %.2f Hz with calibration %+d/32 Hz: raw %.3f Hz\n", $ind, $shown, mi_signed($r[15]), $raw);
+		if (mi_signed($r[15]) === $want) {
+			echo "module $ind: the calibration is $want/32 Hz already; nothing written\n";
+			return;
+		}
+		$b = (int)round(($raw + $want / 32 - 59) * 32);
+		for ($try = 1; $try <= 3; $try++) {
+			($b >= 1 && $b <= 255) || fail("the frequency to send is out of range ($b)");
+			$c = [0, 1, 0, 0, 0, 0];
+			for ($k = 6; $k < 34; $k++)
+				$c[$k] = $r[($k ^ 1) + 8];
+			$c[6] = $b;
+			$c[9] = max(0, $r[16] - 16);
+			$cmd = implode('', array_map(fn($x) => sprintf('%02x', $x), $c));
+			mi_keep_setup();
+			$out = trim(mi_chroot(['./plc_set', '-j', '-p', mi_pwd(), '-i', (string)$ind, '-c', $cmd]));
+			file_put_contents(STATE . '/mi-writes.log', date('Y-m-d H:i:s') . " module $ind cmd $cmd reply $out (calibrate)\n", FILE_APPEND);
+			syslog(LOG_NOTICE, "zlg-admin: MI frequency calibration written to module $ind: $cmd");
+			$r = mi_bytes_read($ind);
+			printf("try %d: sent %.3f Hz, calibration now %+d/32 Hz\n", $try, 59 + $b / 32, mi_signed($r[15]));
+			if (mi_signed($r[15]) === $want)
+				return;
+			$b += $want - mi_signed($r[15]);
+		}
+		fail('the calibration did not settle; see the readings and try again');
+	} finally {
+		if ($was_running) {
+			run(['/usr/bin/systemctl', 'stop', 'zlg-mi-resume-*.timer']);
+			run(['/usr/bin/systemctl', 'start', 'zlg-plc.service']);
+		}
+	}
+}
+
+function mi_signed(int $b): int { return $b > 127 ? $b - 256 : $b; }
+
+function mi_bytes_read(int $ind): array
+{
+	$d = mi_read($ind, '0001');
+	$h = $d === null ? [] : preg_split('/\s+/', $d);
+	count($h) === 44 || fail("module $ind didn't answer");
+	return array_map('hexdec', $h);
+}
+
+function mi_report_busy_cli(): void
+{
+	$st = json_file(RUN . '/mi-report.json');
+	(in_array($st['state'] ?? '', ['starting', 'reading'], true) && time() - ($st['time'] ?? 0) < 300)
+		&& fail('a grid report is being made; try again when it is done');
+}
+
+/* min.dat and the report use the gateway's local time */
+function local_tz(): void
+{
+	$tz = @readlink('/etc/localtime');
+	if ($tz && preg_match('~zoneinfo/(.+)$~', $tz, $m))
+		@date_default_timezone_set($m[1]);
 }
 
 function mi_last_line(string $f): string
@@ -1142,6 +1232,12 @@ try {
 	case '--wifi-guard':
 		wifi_guard();
 		break;
+	case '--mi-calibrate':
+		(ctype_digit($argv[2] ?? '') && preg_match('/^-?\d+$/', $argv[3] ?? ''))
+			|| fail('usage: zlg-admin --mi-calibrate MODULE OFFSET (1/32 Hz)');
+		mi_calibrate((int)$argv[2], (int)$argv[3]);
+		echo "Done.\n";
+		break;
 	case '--set-mi-password':
 		$p = trim((string)fgets(STDIN, 256));
 		preg_match('/^[0-9A-Za-z]{1,16}$/', $p) || fail('1 to 16 letters or digits');
@@ -1153,7 +1249,8 @@ try {
 		echo "The settings password is \"" . DEFAULT_PASSWORD . "\" again.\n";
 		break;
 	default:
-		fwrite(STDERR, "usage: zlg-admin [--wifi-apply-job | --wifi-guard | --reset-password]\n");
+		fwrite(STDERR, "usage: zlg-admin [--wifi-apply-job | --wifi-guard | --reset-password | --set-mi-password |\n" .
+			"       --mi-calibrate MODULE OFFSET]\n");
 		exit(2);
 	}
 } catch (Fail $e) {
