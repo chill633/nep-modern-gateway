@@ -2,7 +2,10 @@
 /* message line, and the login box or the logged-in bar */
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $act = base_url() . 'access/';
+/* NEP's views leave one <div> open, which footer_view closes ("end of main
+   content") before the main container: this page's content does the same */
 ?>
+<div class="zlg-main">
 <div class="zlg-page" style="padding-bottom:0">
 <div class="zlg-account">
 <?php if ($logged_in): ?>

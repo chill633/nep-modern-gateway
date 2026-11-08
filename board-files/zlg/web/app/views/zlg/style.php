@@ -1,6 +1,7 @@
 <?php defined('BASEPATH') OR exit('No direct script access allowed'); ?>
 <style>
 /* the kit's settings pages (Wi-Fi, Modules, Advanced) */
+.zlg-main { background: #fff; overflow: hidden; padding-bottom: 10px; }
 .zlg-page { padding: 15px 20px; font-size: 13px; line-height: 1.5; color: #333; }
 .zlg-page h2 { font-size: 17px; margin: 18px 0 8px; color: #3C633C; }
 .zlg-page h2:first-child { margin-top: 0; }

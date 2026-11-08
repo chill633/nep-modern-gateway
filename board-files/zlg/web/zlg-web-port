@@ -508,6 +508,11 @@ if ($mi_ok) {
 		'~(id="btnreboot"[^>]*>)Reboot Gateway<~' => '$1Leave Setup Mode<',
 		/* Bootstrap's fixed 970 px container is wider than the frame */
 		'~<div class="container">~' => '<div class="container-fluid">',
+		/* the settings tables' inputs have the browser's default width,
+		   which pushes the 7 columns out of the frame: fit them instead */
+		'~</head>~' => "<style>#myTabContent .table input[type=text] { width: 100%; min-width: 55px; " .
+			"box-sizing: border-box; } #myTabContent .table td { padding: 6px; } " .
+			".container-fluid { padding-left: 8px; padding-right: 8px; }</style>\n</head>",
 	];
 	foreach ($edits as $re => $to) {
 		$html = preg_replace($re, $to, $html, 1, $c);
