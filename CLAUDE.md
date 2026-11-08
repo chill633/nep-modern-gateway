@@ -410,8 +410,8 @@ EEPROM says CN; the AP's country IE (US) takes over. README 5a recommends
 it (see "README" above); a longer check of beacon losses is still useful.
 On the board only the wireless modules were replaced (cfg80211, mac80211,
 drivers/net/wireless from work/kernel-install; kernel unchanged, still
-config without ath9k in /proc/config.gz); old ones in
-/root/modules-backup-20261107/wifi-old.tgz. The next SD image carries
+config without ath9k in /proc/config.gz); the old ones' backup
+(/root/modules-backup-20261107) was deleted on 2026-11-08. The next SD image carries
 both. Both dongles work on the new modules; the TL-WN823N is the spare.
 Lessons: reloading the Wi-Fi modules needs `systemctl restart
 wpa_supplicant@wlan0` afterwards (the old process keeps a stale nl80211
