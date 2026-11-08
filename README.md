@@ -773,6 +773,15 @@ checks every request itself; the pages reach it over a socket
     `/var/lib/zlg-admin/mi-writes.log`). Wrong values can make the
     inverters disconnect from the grid or run outside what the utility
     allows; read every module first and keep the replies as a baseline.
+  * **Generate Grid Report** reads every module's settings (about 10
+    seconds per module, no readings meanwhile; `gateway-plc` starts again
+    afterwards) and offers a `.tgz` with a CSV (a row per module: every
+    setting and the raw replies) and a PDF (modules with the same settings
+    grouped, then the raw replies). The settings are decoded as firmware
+    20230903's MI Setup shows them; for grid codes 6 and 7 the report also
+    gives the voltages and frequencies in firmware 20210303's encoding,
+    because which of the two the inverters use isn't confirmed. Meters
+    (IDs starting `FF`) are skipped.
   * Only firmware 20230903's MI Setup is built. **Firmware 20210303's
     doesn't know the 800B inverters (IDs starting `33`)**: it would encode
     the voltage trips about 17 times too low and the power limit doubled.

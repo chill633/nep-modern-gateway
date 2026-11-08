@@ -18,9 +18,56 @@
     <li>The password field of NEP's page isn't needed: the gateway fills it in.</li>
   </ul>
 </div>
+<div class="zlg-box zlg-form" id="report">
+  <b>Grid report.</b> Reads every inverter's settings and gives a .tgz file with a CSV and a PDF of them
+  (decoded as NEP's MI Setup page shows them, with the raw replies). It takes about 10 seconds per module;
+  the gateway has no new readings meanwhile, and the inverters answer only while they produce.
+  <div class="row" style="margin-top:8px">
+    <label style="width:auto;margin-right:8px">Grid frequency</label>
+    <select id="rfreq" style="width:80px"><option value="60">60 Hz</option><option value="50">50 Hz</option></select>
+    <button class="zlg-btn" type="button" id="rstart" style="margin-left:10px">Generate Grid Report</button>
+    <span id="rstate" style="margin-left:12px"></span>
+  </div>
+</div>
 <iframe id="misetup" src="<?php echo base_url(); ?>advanced/ui" style="width:100%;height:1400px;border:0;background:#fff;border-radius:5px" title="MI Setup"></iframe>
 <script type="text/javascript">
 $(function () {
+  var base = "<?php echo base_url(); ?>advanced/";
+  var csrf = "<?php echo htmlspecialchars($csrf, ENT_QUOTES); ?>";
+  function esc(s) { return $("<div>").text(s).html(); }
+  function show(r) {
+    var a = r.report || {};
+    if (a.state === "starting" || a.state === "reading") {
+      $("#rstart").prop("disabled", true);
+      $("#rstate").text("Reading module " + (a.done || 0) + " of " + (a.total || "?") + " ...");
+      setTimeout(poll, 3000);
+    } else {
+      $("#rstart").prop("disabled", false);
+      if (a.state === "done")
+        $("#rstate").html('Ready (' + esc(a.message || "") + '): <a href="' + base + 'report_download?id=' +
+          encodeURIComponent(a.id) + '">' + esc(a.name) + '</a>');
+      else if (a.state === "failed")
+        $("#rstate").text("Failed: " + (a.message || "unknown error"));
+    }
+  }
+  function poll() {
+    $.ajax({ url: base + "report_status", dataType: "json", cache: false, timeout: 10000 })
+      .done(show).fail(function () { setTimeout(poll, 5000); });
+  }
+  $("#rstart").on("click", function () {
+    if (!confirm("Read every inverter's settings now? The gateway has no new readings until it is done (about 10 seconds per module)."))
+      return;
+    $("#rstart").prop("disabled", true);
+    $.ajax({ url: base + "report_start", method: "POST", dataType: "json",
+             data: { csrf: csrf, freq: $("#rfreq").val() } })
+      .done(function (r) {
+        if (!r.ok) { $("#rstate").text("Not started: " + r.error + "."); $("#rstart").prop("disabled", false); return; }
+        poll();
+      })
+      .fail(function () { $("#rstate").text("The gateway didn't answer."); $("#rstart").prop("disabled", false); });
+  });
+  poll();
+
   /* the frame grows with NEP's page (same origin) */
   var f = document.getElementById("misetup");
   setInterval(function () {
