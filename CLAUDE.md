@@ -448,15 +448,23 @@ tested on the New unit (.239); README 7a "Settings pages" documents them.
   unit's copy.
 - Grid report (Advanced page, 2026-11-08): web/admin/mi-report.php
   (installed with the web files, required by zlg-admin --mi-report-job,
-  a systemd-run job; ops mi.report_start/status/get; open like reading).
+  a systemd-run job; ops mi.report_start/status/get; start and download
+  need the settings login, the user's decision; status is open).
+  Nominal frequency (the limits are offsets from it; NEP's page asks for
+  it): the inverters' measured Hz, column 7 of data/<n>/min.dat (date,
+  time, kW, DC V, AC V, AC A, Hz, ...; local time), rounded to 50/60, if
+  under a day old; else by grid code (5,8,12-15,17: 50; 6,7,16: 60); else
+  offsets "(Hz from nominal)". No selector, the user's decision. An
+  all-zero reply is a final no-answer (no retries, no extended read):
+  130 s for 25 modules.
   PHP port of proc()/proc_extend() (tables extracted from proxy.js by
   script); checked against NEP's JS in Firefox on the baseline replies:
   22 modules, 1034 fields, 0 differences (pwr/fref exist only in NEP's
   debug mode, not compared). Output /run/zlg-admin/mi-report.tgz (CSV +
   hand-written Courier PDF, landscape Letter). While it runs, MI Setup's
   setup/leave/read/write are refused. Grid 6/7 also get the 2021-encoding
-  columns. Live runs: 188 s for 25 modules (22 answered, 23/24 no answer,
-  25 meter skipped); gateway-plc restarted after. Reports contain module
+  columns. Live runs: 22 of 25 answered (23/24 no answer, 25 meter
+  skipped); gateway-plc restarted after. Reports contain module
   IDs: never commit one.
 - Browser checks: headless Firefox via /snap/bin/geckodriver and a small
   WebDriver client (urllib), screenshots; sshpass is installed on the

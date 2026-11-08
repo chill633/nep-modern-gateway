@@ -807,15 +807,15 @@ function op_mi_cmd(array $req): array
 	return ['reply' => is_array($r) ? $r : ['type' => '0', 'data' => 'no answer from plc_set']];
 }
 
-/* one read, as plc_set's reply data ("62 37 ..."), or null */
+/* one read, as plc_set's reply data ("62 37 ..."), or null: no answer
+   (an all-zero reply, final) or no valid reply after $tries attempts */
 function mi_read(int $ind, string $cmd, int $tries = 3): ?string
 {
 	for ($i = 0; $i < $tries; $i++) {
 		$r = json_decode(trim(mi_chroot(['./plc_set', '-j', '-p', mi_pwd(), '-i', (string)$ind,
 						  '-c', $cmd . str_repeat('0', 64)])), true);
-		if (is_array($r) && ($r['type'] ?? '') === '10' && isset($r['data']) &&
-		    !preg_match('/^(00 ){44}$/', trim($r['data']) . ' '))
-			return trim($r['data']);
+		if (is_array($r) && ($r['type'] ?? '') === '10' && isset($r['data']))
+			return preg_match('/^(00 ){44}$/', trim($r['data']) . ' ') ? null : trim($r['data']);
 	}
 	return null;
 }
@@ -836,15 +836,14 @@ function mi_report_status(array $s): void
 
 function op_mi_report_start(array $req): array
 {
-	$freq = (string)($req['freq'] ?? '60');
-	in_array($freq, ['50', '60'], true) || fail('the grid frequency is 50 or 60 Hz');
+	need_token($req);
 	mi_pwd();
-	return with_lock('mireport', function () use ($freq) {
+	return with_lock('mireport', function () {
 		$st = json_file(RUN . '/mi-report.json');
 		if (in_array($st['state'] ?? '', ['starting', 'reading'], true) && time() - ($st['time'] ?? 0) < 300)
 			fail('a grid report is already being made');
 		$id = bin2hex(random_bytes(6));
-		mi_report_status(['id' => $id, 'state' => 'starting', 'freq' => $freq, 'done' => 0, 'total' => mi_modcnt()]);
+		mi_report_status(['id' => $id, 'state' => 'starting', 'done' => 0, 'total' => mi_modcnt()]);
 		run(['/usr/bin/systemd-run', '--quiet', '--collect', '--unit=zlg-mi-report-' . $id,
 		     '--property=Type=exec', '/usr/local/sbin/zlg-admin', '--mi-report-job'], $rc);
 		if ($rc !== 0) {
@@ -864,6 +863,7 @@ function op_mi_report_status(array $req): array
 
 function op_mi_report_get(array $req): array
 {
+	need_token($req);
 	$st = json_file(RUN . '/mi-report.json');
 	(($st['state'] ?? '') === 'done' && ($st['id'] ?? '') === (string)($req['id'] ?? '') &&
 	 is_file($st['file'] ?? '')) || fail('no such report');
@@ -878,7 +878,6 @@ function mi_report_job(): void
 		@date_default_timezone_set($m[1]);
 	$st = json_file(RUN . '/mi-report.json');
 	$id = $st['id'] ?? '';
-	$freq = (float)($st['freq'] ?? 60);
 	$ids = [];
 	foreach (plcid_parse((string)file_get_contents(gw() . '/plc_id.conf')) as $n => $v)
 		if ($n > 0 && plcid_value($v) !== '')
@@ -887,7 +886,7 @@ function mi_report_job(): void
 	$was_running = mi_plc_pid() !== '';
 	$raw = [];
 	try {
-		mi_report_status(['id' => $id, 'state' => 'reading', 'freq' => $st['freq'] ?? '60', 'done' => 0, 'total' => $total]);
+		mi_report_status(['id' => $id, 'state' => 'reading', 'done' => 0, 'total' => $total]);
 		run(['/usr/bin/systemctl', 'stop', 'zlg-plc.service']);
 		syslog(LOG_NOTICE, "zlg-admin: grid report: reading $total modules (gateway-plc stopped)");
 		$done = 0;
@@ -896,9 +895,9 @@ function mi_report_job(): void
 			if (str_starts_with($hex, 'FF'))	/* a meter, not an inverter */
 				$raw[$n] = ['skip' => 'meter'];
 			else
-				$raw[$n] = ['basic' => mi_read($n, '0001'), 'ext' => mi_read($n, '0002')];
-			mi_report_status(['id' => $id, 'state' => 'reading', 'freq' => $st['freq'] ?? '60',
-					  'done' => ++$done, 'total' => $total]);
+				$raw[$n] = ($b = mi_read($n, '0001')) === null ? ['basic' => null, 'ext' => null]
+					: ['basic' => $b, 'ext' => mi_read($n, '0002')];
+			mi_report_status(['id' => $id, 'state' => 'reading', 'done' => ++$done, 'total' => $total]);
 		}
 	} finally {
 		if ($was_running) {
@@ -914,6 +913,34 @@ function mi_report_job(): void
 	foreach (['', '_2', '_3', '_4', '_5', '_6', '_14'] as $sfx)
 		$gains[] = is_numeric($plc["AC_V_Gain$sfx"] ?? '') ? (float)$plc["AC_V_Gain$sfx"] : 0.0;
 	$offset = is_numeric($plc['reconn_time_offset'] ?? '') ? (float)$plc['reconn_time_offset'] : 0.0;
+
+	/* the nominal grid frequency the limits are offsets from: what the
+	   inverters measure (their minute log, data/<n>/min.dat: time, power,
+	   DC V, AC V, AC A, Hz, ...), else the grid code's, else unknown */
+	$freq = null;
+	$fsrc = '';
+	foreach ($ids as $n => $hex) {
+		$l = mi_last_line(gw() . "/data/$n/min.dat");
+		$f = preg_split('/\s+/', $l);
+		if (count($f) >= 7 && is_numeric($f[6]) && $f[6] >= 45 && $f[6] <= 65 &&
+		    ($t = strtotime("$f[0] $f[1]")) && abs(time() - $t) < 86400) {
+			$freq = abs($f[6] - 50) < abs($f[6] - 60) ? 50.0 : 60.0;
+			$fsrc = "measured {$f[6]} Hz (module $n, $f[0] $f[1])";
+			break;
+		}
+	}
+	if ($freq === null) {
+		$grids = [];
+		foreach ($raw as $r)
+			if ($b = mi_bytes($r['basic'] ?? null))
+				$grids[] = $b[14];
+		$byGrid = [5 => 50, 6 => 60, 7 => 60, 8 => 50, 12 => 50, 13 => 50, 14 => 50, 15 => 50, 16 => 60, 17 => 50];
+		$g = $grids ? array_search(max(array_count_values($grids)), array_count_values($grids)) : 0;
+		if (isset($byGrid[$g])) {
+			$freq = (float)$byGrid[$g];
+			$fsrc = "from grid code $g";
+		}
+	}
 	$mods = [];
 	$ok = $ext_ok = 0;
 	foreach ($ids as $n => $hex) {
@@ -921,7 +948,7 @@ function mi_report_job(): void
 		$model = mi_model($hex, $gains);
 		$b = mi_bytes($r['basic'] ?? null);
 		$e = mi_bytes($r['ext'] ?? null);
-		$basic = $b ? mi_decode_basic($b, $model, $freq, $offset) : [];
+		$basic = $b ? mi_decode_basic($b, $model, $freq ?? 0.0, $offset) : [];
 		$ok += $b ? 1 : 0;
 		$ext_ok += $e ? 1 : 0;
 		$mods[] = [
@@ -929,7 +956,7 @@ function mi_report_job(): void
 			'basic_state' => isset($r['skip']) ? 'not read' : ($b ? 'ok' : 'no answer'),
 			'ext_state' => isset($r['skip']) ? 'meter' : ($e ? 'ok' : 'no answer'),
 			'basic' => $basic,
-			'old' => $b && in_array($basic['grid'] ?? 0, [6, 7], true) ? mi_decode_old($b, $model, $freq) : [],
+			'old' => $b && in_array($basic['grid'] ?? 0, [6, 7], true) ? mi_decode_old($b, $model, $freq ?? 0.0) : [],
 			'ext' => $e ? mi_decode_ext($e) : [],
 			'raw_basic' => $r['basic'] ?? null, 'raw_ext' => $r['ext'] ?? null,
 		];
@@ -937,7 +964,7 @@ function mi_report_job(): void
 	$cfg = mi_ini(gw() . '/gateway.cfg');
 	$meta = ['time' => date('Y-m-d H:i T'), 'host' => gethostname(),
 		 'firmware' => ($cfg['major'] ?? '?') . ' minor ' . ($cfg['minor'] ?? '?'),
-		 'freq' => (string)(int)$freq, 'read_ok' => $ok, 'ext_ok' => $ext_ok];
+		 'freq' => $freq === null ? null : (int)$freq, 'freq_src' => $fsrc, 'read_ok' => $ok, 'ext_ok' => $ext_ok];
 	$base = 'grid-report-' . preg_replace('/[^A-Za-z0-9-]/', '', gethostname()) . '-' . date('Ymd-Hi');
 	$dir = RUN . '/mi-report-work';
 	run(['/usr/bin/rm', '-rf', $dir]);
@@ -955,6 +982,17 @@ function mi_report_job(): void
 	mi_report_status(['id' => $id, 'state' => 'done', 'name' => "$base.tgz", 'file' => $tgz,
 			  'done' => $total, 'total' => $total, 'read_ok' => $ok,
 			  'message' => "$ok of $total modules answered"]);
+}
+
+function mi_last_line(string $f): string
+{
+	$h = @fopen($f, 'r');
+	if (!$h)
+		return '';
+	fseek($h, max(0, filesize($f) - 512));
+	$l = array_values(array_filter(explode("\n", (string)stream_get_contents($h)), 'strlen'));
+	fclose($h);
+	return trim(end($l) ?: '');
 }
 
 class Reply extends Exception { public $reply; }

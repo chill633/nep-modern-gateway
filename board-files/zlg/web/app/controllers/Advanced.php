@@ -132,8 +132,9 @@ class Advanced extends CI_Controller {
 	{
 		if (!$this->zlg_admin->csrf_ok())
 			return $this->zlg_admin->json(['ok' => false, 'error' => 'the page had expired; reload it'], 403);
-		$this->zlg_admin->json($this->zlg_admin->call('mi.report_start',
-			['freq' => (string)$this->input->post('freq')]));
+		if (!$this->zlg_admin->logged_in())
+			return $this->zlg_admin->json(['ok' => false, 'error' => 'please log in first'], 403);
+		$this->zlg_admin->json($this->zlg_admin->call('mi.report_start'));
 	}
 
 	public function report_status()

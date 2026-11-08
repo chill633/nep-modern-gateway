@@ -23,10 +23,12 @@
   (decoded as NEP's MI Setup page shows them, with the raw replies). It takes about 10 seconds per module;
   the gateway has no new readings meanwhile, and the inverters answer only while they produce.
   <div class="row" style="margin-top:8px">
-    <label style="width:auto;margin-right:8px">Grid frequency</label>
-    <select id="rfreq" style="width:80px"><option value="60">60 Hz</option><option value="50">50 Hz</option></select>
-    <button class="zlg-btn" type="button" id="rstart" style="margin-left:10px">Generate Grid Report</button>
+<?php if ($logged_in): ?>
+    <button class="zlg-btn" type="button" id="rstart">Generate Grid Report</button>
     <span id="rstate" style="margin-left:12px"></span>
+<?php else: ?>
+    <span class="zlg-muted">Log in (top right) to make a report.</span>
+<?php endif; ?>
   </div>
 </div>
 <iframe id="misetup" src="<?php echo base_url(); ?>advanced/ui" style="width:100%;height:1400px;border:0;background:#fff;border-radius:5px" title="MI Setup"></iframe>
@@ -59,14 +61,14 @@ $(function () {
       return;
     $("#rstart").prop("disabled", true);
     $.ajax({ url: base + "report_start", method: "POST", dataType: "json",
-             data: { csrf: csrf, freq: $("#rfreq").val() } })
+             data: { csrf: csrf } })
       .done(function (r) {
         if (!r.ok) { $("#rstate").text("Not started: " + r.error + "."); $("#rstart").prop("disabled", false); return; }
         poll();
       })
       .fail(function () { $("#rstate").text("The gateway didn't answer."); $("#rstart").prop("disabled", false); });
   });
-  poll();
+  if ($("#rstart").length) poll();
 
   /* the frame grows with NEP's page (same origin) */
   var f = document.getElementById("misetup");
