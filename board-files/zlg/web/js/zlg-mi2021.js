@@ -17,6 +17,8 @@
  * zero byte. The frequency calibration byte is always 00 here: the inverter
  * takes it as the actual grid frequency and recalibrates (zlg-admin
  * --mi-calibrate does that). Other models and grid codes stay NEP's code.
+ * For all models, Extended Set keeps the form for every module of a range
+ * and asks before sending unticked sections as 00 (end of this file).
  */
 (function () {
 	'use strict';
@@ -240,5 +242,52 @@
 					if (nam <= parseInt($('#ind_2').val(), 10)) mwrite(0, nam); else stop();
 				}
 			});
+	};
+
+	/* ---- Extended Set (NEP's mwrite_extend, all models) ----
+	 * 1. NEP's page refreshes the form from each module's reply
+	 *    (proc_extend), which unticks V_Norm / Ramp Delay among others, so a
+	 *    range write sent those as 00 to every module after the first. The
+	 *    form as it was when Set was pressed is restored before each module.
+	 * 2. Every unticked section goes out as 00, and the inverter stores
+	 *    some of those zeros (seen on the 800B: fixed power factor, watt-PF
+	 *    points, the volt-watt control byte): ask before writing. */
+	if (typeof window.mwrite_extend !== 'function')
+		return;
+	/* Temperature MAX and CTRL FLAG aren't listed: the 800B keeps them when
+	   they come as 00 (2026-11-09) */
+	var EXT_SECTIONS = [['chk_vnorm', 'V_Norm / Ramp Delay'], ['chk_freq_watt', 'FREQ-WATT'],
+		['chk_volt_watt', 'VOLT-WATT'], ['chk_var_ctrl', 'VAR-CTRL']];
+	var form = null;	/* the form when Set was pressed */
+	function take() {
+		var s = [];
+		$('input, select, textarea').each(function () {
+			if (!this.id || /^(ind_1|ind_2|pwd)$/.test(this.id)) return;
+			var box = this.type === 'checkbox' || this.type === 'radio';
+			s.push([this, box, box ? this.checked : $(this).val()]);
+		});
+		return s;
+	}
+	function put(s) {
+		s.forEach(function (e) { if (e[1] && !e[2]) e[0].checked = false; });
+		s.forEach(function (e) { if (e[1]) { if (e[2]) e[0].checked = true; } else $(e[0]).val(e[2]); });
+	}
+	var nepMwriteExtend = window.mwrite_extend;
+	window.mwrite_extend = function (cnt, nam) {
+		if (parseInt(nam, 10) === parseInt($('#ind_1').val(), 10) && !cnt) {
+			var off = EXT_SECTIONS.filter(function (x) { return $('#' + x[0]).length && !$('#' + x[0]).is(':checked'); })
+				.map(function (x) { return x[1]; });
+			if (off.length && !confirm('Not ticked: ' + off.join(', ') + '.\n\nNEP\'s Extended Set sends these as 00, ' +
+				'not "unchanged": the inverter may store zeros for them (on 800B inverters: the fixed power ' +
+				'factor, the watt-PF points and the volt-watt control byte; Temperature MAX and CTRL FLAG ' +
+				'are kept). To keep a section, Check the module and tick it.\n\nWrite anyway?')) {
+				$('#cons').unblock();
+				return;
+			}
+			form = take();
+		} else if (form) {
+			put(form);	/* NEP's reply handling unticked parts of it */
+		}
+		return nepMwriteExtend(cnt, nam);
 	};
 })();

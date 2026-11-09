@@ -468,6 +468,18 @@ was run and the copies were deleted.
   electrician's test). The 11:55 grid report predates it; a new one
   (the record after the GFDI change) is planned for the morning of
   2026-11-10 (scheduled in the session only; if it didn't run, run it).
+- Extended Set fixes in zlg-mi2021.js (2026-11-09, all models): wraps
+  NEP's mwrite_extend. (1) Range writes: the form (ticks, values, radios,
+  except ind_1/ind_2/pwd) is saved when Set starts (nam = ind_1, cnt 0)
+  and restored before each later module, since proc_extend's
+  reconvertvalue() unticks chk_vnorm (and others) from each reply.
+  (2) confirm() before writing with V_Norm/Ramp, FREQ-WATT, VOLT-WATT or
+  VAR-CTRL unticked (they go out as 00); Cancel sends nothing. Temperature
+  MAX and CTRL FLAG aren't listed (kept on 00). Tested in the real page
+  with the network stubbed (scratchpad write/rehearse-ext.py): range 3-4
+  sends identical commands; Cancel sends nothing. README 7a describes it.
+  Deployed on .239; .238 (reserve) was off: it still has the previous
+  file until it's on again or reinstalled from the kit.
 - Utility profile (local only: ~/Working/nep-local/grid-settings/, CFF v2.0
   -> NEP field mapping, names the utility, never commit): can't encode
   OV2 288 V, UV2 120 V, OF1/UF1 300 s, ES_V_LOW 220.08 V; NEP's volt-var
