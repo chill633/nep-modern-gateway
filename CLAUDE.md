@@ -478,8 +478,19 @@ was run and the copies were deleted.
   MAX and CTRL FLAG aren't listed (kept on 00). Tested in the real page
   with the network stubbed (scratchpad write/rehearse-ext.py): range 3-4
   sends identical commands; Cancel sends nothing. README 7a describes it.
-  Deployed on .239; .238 (reserve) was off: it still has the previous
-  file until it's on again or reinstalled from the kit.
+  Deployed on .239 and (once it was back on, 2026-11-09 13:30) on .238;
+  both run the same kit code (install scripts identical to the branch).
+  Build tree synced again to nep-fw-20230903 4cdfe71.
+- Panel 9 (New unit's numbering; one input of inverter 9/10), 2026-11-09:
+  low output not caused by the writes: on 11-07 it matched panel 10, on
+  11-08 (before any write to it) 0.01-0.02 kW against 0.10-0.17, this
+  morning normal again, after 12:10 ~0 kW with DC ~29 V and 0 A while
+  panel 10 (same inverter, same settings) has 0.3 A; no error codes
+  (only 8000 at night), status 8B05. Panels 9-12 normally give about a
+  third of 7/8 (shade or orientation). Suggested to the user: look for
+  debris/shade on panel 9, check its DC connectors, swap inputs 9/10 to
+  see whether it follows the panel. min.dat fields: 3 kW, 4 DC V, 5 AC V,
+  6 A, 7 Hz, 11 status, 12 error; daily history data/<n>/<date>min.dat.gz.
 - Utility profile (local only: ~/Working/nep-local/grid-settings/, CFF v2.0
   -> NEP field mapping, names the utility, never commit): can't encode
   OV2 288 V, UV2 120 V, OF1/UF1 300 s, ES_V_LOW 220.08 V; NEP's volt-var
