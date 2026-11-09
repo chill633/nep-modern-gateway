@@ -504,11 +504,22 @@ was run and the copies were deleted.
   IEEE 1547-2018, 1547.1-2020. The user is the installer. The volt-var
   open-loop delay is the first VAR-CTRL row (0-400 s).
 
-## Consumption meter (2026-11-07, 2026-11-09)
+## Consumption meter (2026-11-07, 2026-11-09) -- closed
 
-Since 2026-11-09 the New unit's TL-WN722N is on a passive USB hub with the
-Waveshare adapter, and the router gave it **192.168.1.127** instead of .239
-(DHCP; reserve .239 for the dongle's MAC to get it back).
+**Closed 2026-11-09 (the user's decision):** no consumption meter with the
+NEP system; the EG4 system (GridBOSS CTs on every port, FlexBOSS export
+limiting) handles it (see "The microgrid around the NEP inverters").
+Don't propose meter work again unless the user brings it up. Cleanup the
+same day: the meter entry (module 25, FF000002) removed through the kit's
+Modules page path (plc_id.conf backed up in /var/lib/zlg-admin/modules;
+24 modules, modcount 24, NEP's software restarted);
+/etc/modules-load.d/rs485-ftdi.conf deleted; the user unplugged the
+Waveshare adapter and the USB hub (the TL-WN722N back in the USB-A port).
+Still as before, harmless: plc.conf meter_address=0x02, and NEP's
+gateway-pctrl (= gateway-meter-pwrlmt, recreated nightly) polling the
+empty USB-B port. While the dongle was on the hub the router gave the
+unit 192.168.1.127 instead of .239; with it back in the USB-A port it is
+at .239 again (checked 2026-11-09). The facts below stay for reference.
 
 
 Acrel AGF-AE-D split-phase meter on the New unit, Modbus address 2,
