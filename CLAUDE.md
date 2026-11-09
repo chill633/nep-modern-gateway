@@ -379,14 +379,16 @@ was run and the copies were deleted.
   if the 2021 offset applies, the page writes 20 C below what is typed).
   LVRT (control flag bit 0x04) = low-voltage ride-through; no vendor
   documentation on what the toggle does or how it relates to the UV
-  settings. The inverters now have flags 01 (GFDI on, LVRT off); NEP's
+  settings. The inverters have flags 01: bit 0 is DISABLE GFDI, so
+  ground-fault detection is OFF (factory state, unchanged; corrected
+  2026-11-09, it was first described as "GFDI on"), LVRT off. NEP's
   US custom profiles (Alliant, BCHydro, Connexus, LUMA, MISO, PNM,
-  US-120V; all grid 6) set flag_ctrl=4 (LVRT on, GFDI off) and use
+  US-120V; all grid 6) set flag_ctrl=4 (LVRT on, GFDI detection on) and use
   288/120 V, which the 800B's 2021 encoding can't hold: they were
   presumably made for inverters that use the 2023 encoding.
   Building it found a bug, fixed: the voltage range check compared the raw
   value, so the printed limits 278.5/161.5 V were refused; it now checks
-  the encoded byte (1-255). Nothing written yet; waiting for the utility.
+  the encoded byte (1-255). Written 2026-11-09 (below).
 - Deviation permission (2026-11-08): the utility's support gave it by
   phone; the user chose volt-var Q1 44 % / Q4 -44 % and asked Claude to do
   the writes on 2026-11-09 (one inverter, modules 3/4, first; then 1/2 and
@@ -401,6 +403,21 @@ was run and the copies were deleted.
   reply, so a range write sends V_Norm/Ramp only to the first module:
   write extended settings one module at a time. A write with
   ZLG_MI_WRITES=0 is refused before plc_set runs (tested by script).
+- **Written 2026-11-09 (all 11 connected inverters, modules 1-22):**
+  PTO-closest with V_Norm 245 (the user: 7-month median 245 V; volt-var
+  points recalculated to keep the utility's volts: Vref 100 %, V
+  93/97/103/107 % = 227.9/237.7/252.4/262.2 V). Extended command
+  0002000000000000c000090d13179110001e2c0000057f000909b255000000000000.
+  Settings are per inverter (writing module 3 changed module 4): one
+  module per pair written, both read back. All 22 identical and as
+  intended; calibration bytes unchanged. The extended write's 00s were
+  stored literally for the fixed-PF value, watt-PF points and the
+  volt-watt control byte (7f sent, 00 stored; off either way), kept for
+  temperature, flags and the volt-watt curve. Production back ~7 min
+  after each write. ZLG_MI_WRITES=0 again. Grid report 11:55 in
+  ~/Working/nep-local/grid-reports/ (module IDs: local only). Inverter
+  23/24 (unplugged) not written. Tool: scratchpad write/pto.py (server
+  path /nep/advanced/proxy with the page's commands; session only).
 - Utility profile (local only: ~/Working/nep-local/grid-settings/, CFF v2.0
   -> NEP field mapping, names the utility, never commit): can't encode
   OV2 288 V, UV2 120 V, OF1/UF1 300 s, ES_V_LOW 220.08 V; NEP's volt-var
