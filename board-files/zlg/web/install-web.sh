@@ -13,7 +13,7 @@
 # zlg-web-port from /srv/zlg; the original stays as it is.
 set -eu
 cd "$(dirname "$0")"
-HERE=$(pwd)
+HERE=$(pwd -P)
 SHARE=/usr/local/share/zlg/web
 
 die() { echo "install-web: $*" >&2; exit 1; }
@@ -77,9 +77,13 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
 systemctl disable --now lighttpd.service php8.4-fpm.service 2>/dev/null || true
 
 echo "Installing the web files ..."
-rm -rf "$SHARE"
-mkdir -p "$SHARE"
-cp -r "$HERE/." "$SHARE/"
+# run from the image's copy (README 7a: /usr/local/share/zlg/web), it is
+# already in place: removing $SHARE would remove the script's own files
+if [ "$HERE" != "$(cd "$SHARE" 2>/dev/null && pwd -P)" ]; then
+	rm -rf "$SHARE"
+	mkdir -p "$SHARE"
+	cp -r "$HERE/." "$SHARE/"
+fi
 chmod 755 "$SHARE/zlg-web-port"
 install -d /etc/zlg
 install -m 644 lighttpd.conf /etc/zlg/lighttpd.conf

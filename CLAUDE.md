@@ -463,6 +463,49 @@ never write inverter settings. Since 2026-11-07 it is on the bench booted
 from its factory NAND system (firmware 20210303, kernel 4.1.15, hostname
 Gateway) at 192.168.1.241, user root; no inverters attached.
 
+Old unit upgraded (2026-11-08, by the user, forced from NEP's factory
+system): it runs firmware **20230903** (minor 4; New: minor 23) on its
+NAND system, kernel 4.1.15. gateway-plc, plc_set and the MI Setup files
+(proxy.js, _mi.js, common.js, index.html, proxy.cgi) are byte-identical to
+the New unit's; same 39 profiles + 8 custom, version 3.09. engineer.cfg
+kept (comm_device=0, plc_module=1). The user cleared plc_id.conf before
+the upgrade (no inverters). Being NEP's own system it is cloud-connected
+(MQTT to NEP's broker on 8883, my_nsync, critical_alert). The "never write
+with the Old unit's misetup" rule was about its 20210303 page; the 2021
+page's problems stay true in general. The user plans to shut it down and
+keep it as the emergency reserve for the New unit. For a swap:
+- The inverters' grid settings live in the inverters: after the
+  2026-11-09 writes a replacement gateway only reads them.
+- New's plc_id.conf, plc_phase.conf, engineer.cfg and plc.conf are copied
+  to ~/Working/nep-local/new-unit-reserve-20261108/ (module IDs: never
+  commit).
+- Unknown: whether the inverters answer another gateway's PLC network
+  (gateway-plc sets a network password and address on the modem at start;
+  the MI Setup password is per gateway, from its serial number). Not
+  testable without a swap.
+- The kit on SD for it would come from nep-fw-20230903 (nep_fw_check);
+  a prepared spare card makes the swap a card change.
+- Done the same evening: a fresh SD card from the kit (build tree
+  ~/Working/m6g2c-trixie synced to nep-fw-20230903 8c03fa2, kernel stage
+  by Claude, rootfs + image + tools/write-sdcard.sh by the user; image has
+  both Wi-Fi drivers). The Old unit boots it at **192.168.1.238** (user
+  debian, password given per session; TL-WN823N), hostname NEP-xxxxx again
+  (from its serial). Set up per README 7/7a: /etc/default/zlg copied from
+  the New unit before the first start (ZLG_LOCAL_ONLY=1, weather location;
+  the kit's default is 0), zlg-import (firmware check passed), zlg.target,
+  install-web.sh, --switch (port 80), MI password from its serial. No
+  outside connections; zlg-mqtt skipped; plc_id.conf empty. It's the
+  reserve; the user plans to shut it down. Before the card was rewritten
+  the user saved its old /srv/zlg (NEP firmware 20210303 copy) as
+  ~/Working/nep-local/old-sd-srv-zlg-20210303.tgz (root-owned; local only).
+- Two kit bugs found on that card, fixed: install.sh copied nep-firmware(.sh)
+  onto itself when run from /usr/local/share/zlg (README 7's command), so
+  set -e stopped it before the services; install-web.sh run from
+  /usr/local/share/zlg/web did rm -rf of its own folder before copying.
+  Both now skip the copy when run from the installed location (verified on
+  .238). The code came after the 2026-11-05 image, so no install from an
+  image's copy had run it before.
+
 Wi-Fi at the New unit's production spot (2026-11-06, log read only): the
 link is weak (-64 to -68 dBm, rx bitrate 2 Mbit/s, repeated
 CTRL-EVENT-BEACON-LOSS; the APs also dropped it with reason=34 in the
