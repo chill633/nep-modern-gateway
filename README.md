@@ -792,6 +792,16 @@ checks every request itself; the pages reach it over a socket
     refuses 800B writes that don't come from the page's 2021 encoder, with
     another grid code or with a calibration byte, whatever `ZLG_MI_WRITES`
     says.
+  * **Extended Set** (all models): NEP's page sends every section whose box
+    isn't ticked as 00, not "unchanged", and an 800B inverter stores some
+    of those zeros (the fixed power factor, the watt-PF points, the
+    volt-watt control byte; it keeps Temperature MAX and CTRL FLAG). The
+    page asks before writing with V_Norm/Ramp, FREQ-WATT, VOLT-WATT or
+    VAR-CTRL unticked: Check the module and tick the sections to keep.
+    Writing a range of modules uses the form as it was when Set was
+    pressed for every module (NEP's page reloaded it from each reply and
+    sent V_Norm and Ramp Delay as 00 to all but the first). The two
+    modules of an inverter share its settings.
   * **An 800B inverter stops producing for about 5 minutes after each read
     or write** (its reconnect time); the settings don't change.
   * `sudo zlg-admin --mi-calibrate MODULE OFFSET` sets one module's
