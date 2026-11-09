@@ -413,9 +413,11 @@ was run and the copies were deleted.
   if the 2021 offset applies, the page writes 20 C below what is typed).
   LVRT (control flag bit 0x04) = low-voltage ride-through; no vendor
   documentation on what the toggle does or how it relates to the UV
-  settings. The inverters have flags 01: bit 0 is DISABLE GFDI, so
-  ground-fault detection is OFF (factory state, unchanged; corrected
-  2026-11-09, it was first described as "GFDI on"), LVRT off. NEP's
+  settings. Control flag bit 0 is DISABLE GFDI (NEP's page label); the
+  inverters came with 01 (ground-fault detection OFF; first described
+  here as "GFDI on", corrected 2026-11-09). **Enabled 2026-11-09** (the
+  user: the NEC requires a functional, enabled GFDI): see "GFDI enabled"
+  below. LVRT off. NEP's
   US custom profiles (Alliant, BCHydro, Connexus, LUMA, MISO, PNM,
   US-120V; all grid 6) set flag_ctrl=4 (LVRT on, GFDI detection on) and use
   288/120 V, which the 800B's 2021 encoding can't hold: they were
@@ -452,6 +454,18 @@ was run and the copies were deleted.
   ~/Working/nep-local/grid-reports/ (module IDs: local only). Inverter
   23/24 (unplugged) not written. Tool: scratchpad write/pto.py (server
   path /nep/advanced/proxy with the page's commands; session only).
+- **GFDI enabled 2026-11-09:** the current extended command with control
+  flags 80 (section ticked, all bits clear; produced by the real page):
+  0002000000000080c000090d13179110001e2c0000057f000909b255000000000000.
+  The inverter stores 00 (the 0x80 marker isn't kept). Modules 3/4 first
+  (12:00; reconnected 12:07, normal output, error 0), then the other ten
+  inverters (12:12-12:16); all 22 read back OK, nothing else changed. All
+  producing at 12:23, no error codes (8000 right after setup mode = the
+  gateway hasn't read the module yet). Only sending the flag section
+  would zero other fields: always send the full extended settings.
+  PTO-closest has flag_ctrl=0. Confirmed: enabled, and the array passes
+  the start-up check; not tested: tripping on a real fault (an
+  electrician's test). The 11:55 grid report predates it.
 - Utility profile (local only: ~/Working/nep-local/grid-settings/, CFF v2.0
   -> NEP field mapping, names the utility, never commit): can't encode
   OV2 288 V, UV2 120 V, OF1/UF1 300 s, ES_V_LOW 220.08 V; NEP's volt-var
