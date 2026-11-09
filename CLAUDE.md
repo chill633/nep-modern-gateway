@@ -516,6 +516,11 @@ keep it as the emergency reserve for the New unit. For a swap:
   Both now skip the copy when run from the installed location (verified on
   .238). The code came after the 2026-11-05 image, so no install from an
   image's copy had run it before.
+- Build tree ~/Working/m6g2c-trixie synced to nep-fw-20230903 9981236
+  on 2026-11-09 (git archive over it; local.env, out/, work/ and
+  board-files/zlg/web/deps kept). out/ still holds the image written to
+  the reserve's card (old install scripts); the next rootfs + image
+  build carries the fixes.
 
 Wi-Fi at the New unit's production spot (2026-11-06, log read only): the
 link is weak (-64 to -68 dBm, rx bitrate 2 Mbit/s, repeated
