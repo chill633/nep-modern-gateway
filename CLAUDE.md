@@ -551,6 +551,45 @@ are read-only Modbus requests; testing ttymxc2 needs zlg-pctrl stopped
 the meter (monitoring only might be a small reader of the kit's own on
 ttyUSB0 rather than NEP's Net-Zero mode and its provisioning).
 
+## The microgrid around the NEP inverters (2026-11-09)
+
+From the user: the NEP micros (9.2 kW AC nameplate) are a small part of
+an EG4 system: FlexBOSS21 hybrid inverter (14 kW DC PV; spec sheet 16 kW
+AC continuous, 12 kW battery-only), 42.9 kWh DC-coupled batteries (up to
+12 kW charge), GridBOSS Model 1 MID (MI-200-2P-HYB) with CTs on every
+port. The micros go through a combiner into a GridBOSS smart port set to
+AC Couple; the utility feed enters the GridBOSS; the FlexBOSS connects to
+it through its own grid port. Minimum household load ~1 kW. Goal: total
+export never above 22 kW (worst case without control: 16 + 9.2 - 1 =
+24.2 kW). Manuals in ~/Working/Reference (FlexBOSS-21-Manual.pdf, GridBOSS
+user manual v1.0, both spec sheets, AC-Coupling-Guide-18kPV-12kPV.pdf).
+- FlexBOSS manual 15.1: "Export limiting from all sources (PEL)", Max
+  export to Grid (kW), a UL 1741 PCS/CRD function; with a GridBOSS the
+  FlexBOSS's own CTs aren't used (GridBOSS measures all ports).
+- GridBOSS manual (AC Couple): on-grid, the AC-couple relay is closed only
+  while the FlexBOSS's "Export to Grid" is enabled; off-grid, it opens by
+  SOC/voltage/time or when the inverters get too much AC-coupled power.
+  On/off only.
+- AC Coupling Guide (18kPV/12kPV, which share core firmware with the
+  FlexBOSS): AC-coupled inverter on the Gen port, hybrid presents a 240 V
+  reference between AC Couple start/end SOC (98/100 %); "the EG4 inverter
+  does not dictate the amount of power coming from your AC coupled
+  inverter(s)"; export must be enabled (at least 1 kW). No mention of
+  frequency shifting in any of the EG4 documents.
+- Explained to the user: on-grid the utility holds voltage and frequency,
+  so nothing the FlexBOSS does can drive the micros' volt-watt or
+  frequency-watt; islanded, the frequency the FlexBOSS forms is the whole
+  GridBOSS bus's (relay closed), so shifting would reach the micros, but
+  the firmware isn't documented to do it. With the micros' settings,
+  frequency-watt (0.036 Hz, 5 %) would cut only ~38 % before OF1
+  (61.19 Hz, 204.7 s) and trip at 62 Hz. Volt-watt stays off (the
+  utility's profile). Suggested: test whether PEL counts the AC-coupled
+  port (low max export, batteries full, midday; watch the grid-port
+  power); if it doesn't, 22 - 9.2 = 12.8 kW; ask EG4 about frequency
+  shifting and PEL. Proportional on-grid curtailment of the micros would
+  need NEP's meter-driven mode (see "Consumption meter"); writing their
+  power limit restarts them (~5 min), so not for live control.
+
 ## Production moved to the New unit (2026-11-06)
 
 The user put the New unit (firmware 20230903, NEP-yyyyy, 192.168.1.239)
