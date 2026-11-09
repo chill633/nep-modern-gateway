@@ -506,6 +506,11 @@ was run and the copies were deleted.
 
 ## Consumption meter (2026-11-07, 2026-11-09)
 
+Since 2026-11-09 the New unit's TL-WN722N is on a passive USB hub with the
+Waveshare adapter, and the router gave it **192.168.1.127** instead of .239
+(DHCP; reserve .239 for the dongle's MAC to get it back).
+
+
 Acrel AGF-AE-D split-phase meter on the New unit, Modbus address 2,
 9600 8N1, proven by a direct read (122/122 V, 60 Hz) through a Waveshare
 USB-RS485 adapter (FT232RNL; /dev/ttyUSB0; works only through a USB hub
@@ -526,6 +531,25 @@ cable). Open: NEP stored no meter data on 2026-11-07 (bind-mounting
 ttyUSB0 over ttymxc2 made the meter answer) because its provisioning
 (WN_ConnectType, WN_Aps1-3) isn't set; the user's goal beyond zero export
 is still to be discussed. The unit was set back to comm_device=0 (BDM).
+
+2026-11-09, the USB-B (ttymxc2) port tested: two cables (a thin USB-B
+pigtail: red pin 1 floating, white pin 2 1.25 V, green pin 3 5.4 V, black
+GND; then a passive USB-B to DB9 cable: pin 2 4.8 V, pin 3 0.22 V, pin 5
+GND), both polarities, plain and with RTS switched by hand (TIOCSRS485 is
+refused: ENOTTY), before and after a full reboot: no reply, and NEP's own
+polling (gateway-pctrl is a link to gateway-meter-pwrlmt, recreated at
+01:00; it polls ttymxc2 even with comm_device=0, about 3 requests per
+20 s) received 0 bytes. The factory device tree configures UART3 the same
+way (TX/RX only), and no ZLG/NEP script touches a GPIO, so direction is
+switched in hardware. Decisive: with the USB-B cable on the meter's A/B
+even the Waveshare got no answer; disconnected, the Waveshare read the
+meter at once (address 2, 9600: 122.9/122.5 V, 245.4 V, 59.96 Hz). The
+gateway's RS-485 port holds the bus (stuck transmitting): never connect
+it to the meter's bus. Test scripts (scratchpad mbtest.py / mbscan.py)
+are read-only Modbus requests; testing ttymxc2 needs zlg-pctrl stopped
+(it holds the port), ttyUSB0 doesn't. Next: what the user wants from
+the meter (monitoring only might be a small reader of the kit's own on
+ttyUSB0 rather than NEP's Net-Zero mode and its provisioning).
 
 ## Production moved to the New unit (2026-11-06)
 
