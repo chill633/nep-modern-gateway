@@ -465,7 +465,9 @@ was run and the copies were deleted.
   would zero other fields: always send the full extended settings.
   PTO-closest has flag_ctrl=0. Confirmed: enabled, and the array passes
   the start-up check; not tested: tripping on a real fault (an
-  electrician's test). The 11:55 grid report predates it.
+  electrician's test). The 11:55 grid report predates it; a new one
+  (the record after the GFDI change) is planned for the morning of
+  2026-11-10 (scheduled in the session only; if it didn't run, run it).
 - Utility profile (local only: ~/Working/nep-local/grid-settings/, CFF v2.0
   -> NEP field mapping, names the utility, never commit): can't encode
   OV2 288 V, UV2 120 V, OF1/UF1 300 s, ES_V_LOW 220.08 V; NEP's volt-var
