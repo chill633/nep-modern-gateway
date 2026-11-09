@@ -470,6 +470,29 @@ was run and the copies were deleted.
   IEEE 1547-2018, 1547.1-2020. The user is the installer. The volt-var
   open-loop delay is the first VAR-CTRL row (0-400 s).
 
+## Consumption meter (2026-11-07, 2026-11-09)
+
+Acrel AGF-AE-D split-phase meter on the New unit, Modbus address 2,
+9600 8N1, proven by a direct read (122/122 V, 60 Hz) through a Waveshare
+USB-RS485 adapter (FT232RNL; /dev/ttyUSB0; works only through a USB hub
+in the bottom USB-A port; ftdi_sio autoloaded by
+/etc/modules-load.d/rs485-ftdi.conf on the unit, not in the kit). NEP's
+COMID for it is FF000002 (the last byte is the Modbus address);
+plc_id.conf Inverter25 and plc.conf meter_address=0x02 are set. NEP reads
+meters only in the Net-Zero personality (engineer.cfg comm_device=3, set
+on the LCD's engineering menu, not by hand): gateway-meter-pwrlmt, a
+control mode that curtails the inverters to hold export near zero; don't
+leave it on in production with a meter that doesn't work. It opens
+/dev/ttymxc2 (UART3). The gateway's **USB-B socket is not USB**: it is
+UART3's RS-485 port in a USB-B housing (NEP's BDM-NETZ-B meter cable
+socket): no 5 V, nothing enumerates; never plug a USB device or a PC
+into it. Pinout (A, B, ground, any supply) not known: to be measured
+with a plain USB-B plug breakout (not a "USB to RS-485" converter
+cable). Open: NEP stored no meter data on 2026-11-07 (bind-mounting
+ttyUSB0 over ttymxc2 made the meter answer) because its provisioning
+(WN_ConnectType, WN_Aps1-3) isn't set; the user's goal beyond zero export
+is still to be discussed. The unit was set back to comm_device=0 (BDM).
+
 ## Production moved to the New unit (2026-11-06)
 
 The user put the New unit (firmware 20230903, NEP-yyyyy, 192.168.1.239)
