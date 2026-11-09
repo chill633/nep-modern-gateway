@@ -446,7 +446,9 @@ was run and the copies were deleted.
   sends identical commands; Cancel sends nothing. README 7a describes it.
   Deployed on .239 and (once it was back on, 2026-11-09 13:30) on .238;
   both run the same kit code (install scripts identical to the branch).
-  Build tree synced again to nep-fw-20230903 4cdfe71.
+  The build tree is synced to nep-fw-20230903 on request (git archive
+  over it; last 2026-11-09); a CLAUDE.md-only commit after a sync leaves
+  just that file behind, which doesn't affect builds.
 - Panel 9 (New unit's numbering; one input of inverter 9/10), 2026-11-09:
   low output not caused by the writes: on 11-07 it matched panel 10, on
   11-08 (before any write to it) 0.01-0.02 kW against 0.10-0.17, this
@@ -527,8 +529,8 @@ keep it as the emergency reserve for the New unit. For a swap:
   Both now skip the copy when run from the installed location (verified on
   .238). The code came after the 2026-11-05 image, so no install from an
   image's copy had run it before.
-- Build tree ~/Working/m6g2c-trixie synced to nep-fw-20230903 9981236
-  on 2026-11-09 (git archive over it; local.env, out/, work/ and
+- Build tree ~/Working/m6g2c-trixie synced to nep-fw-20230903 on
+  2026-11-09 (git archive over it; local.env, out/, work/ and
   board-files/zlg/web/deps kept). out/ still holds the image written to
   the reserve's card (old install scripts); the next rootfs + image
   build carries the fixes.
