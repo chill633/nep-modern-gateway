@@ -180,6 +180,66 @@ position from weather.conf first. The port lints application files with
 php -l (--no-lint for qemu tests); it caught nothing before because a
 repeated #[AllowDynamicProperties] is a compile error, not a parse error.
 
+## Weather from a local weewx station; local NTP (2026-11-10)
+
+The user's weewx station: weewx 5.4, NeoWX Material skin (HTML only, no
+JSON), Davis Vantage Vue (no sky or solar sensor, so no "Sunny/Cloudy":
+the conditions are the current readings, the user's choice), at
+weather.home.arpa (A 192.168.1.253; DNS also returns a NAT64 AAAA, hence
+IPv4-only fetches). The user installed the kit's report on it.
+- board-files/zlg/weewx/zlg-json: skin.conf + zlg.json.tmpl (Cheetah,
+  ToDate, fixed units via ValueHelper conversions and .json(); fields
+  dateTime, time, outTemp_F, outHumidity, windSpeed_mph, windDir,
+  rainRate_inh, dayRain_in, dayHigh_F, dayLow_F, sunrise, sunset). Report
+  [[ZlgJson]] with HTML_ROOT = /var/www/html/weewx (weewx's default, the
+  user's request); the first install wrote elsewhere (404) until the user
+  fixed HTML_ROOT. `weectl report run ZlgJson` writes it at once. Running
+  pip/weewx code on the workstation was blocked by auto mode; the template
+  was checked against weewx 5.4's source (units.py, almanac.py) instead.
+- zlg-weather.php: url in /m6g2c/weather.conf -> weewx path; conditions
+  e.g. "57°F, 61% RH, calm" ("Rain x in/h" first while raining, the day's
+  rain last); stale (> 30 min, the station's Date header minus dateTime:
+  the gateway's own clock is shifted by zlg-time.so) -> "Station offline
+  since HH:MM"; failures keep the last file. zlg-weather.timer
+  (*:2/10, ExecCondition grep ^url weather.conf) in install.sh's wants.
+- Source switch (the user's request): ZLG_WEATHER_SOURCE (weewx |
+  openmeteo; unset = weewx if ZLG_WEATHER_URL is set) + ZLG_WEATHER_URL in
+  /etc/default/zlg. zlg-chroot weather_conf() writes weather.conf (url
+  only for weewx; lat/lon); `zlg-chroot weather` rewrites it and fetches
+  once. zlg-admin weather.get (open) / weather.set (login): normalizes
+  IP/name/URL to http://host/zlg.json, probes the station's zlg.json
+  first, edits /etc/default/zlg (zlg_default_set: replaces VAR= or #VAR=,
+  refuses shell characters), runs zlg-chroot weather. Page side: Weather
+  controller (save), views/zlg/weather_source.php injected by zlg-web-port
+  after the #weather table of NEP's info_view (radio "Open-Meteo, with
+  map" / "Local Weewx", station field, login box, "Logged in for
+  changes." + Log out; Zlg_admin::page_ok accepts info/index).
+  Googlemaps.php returns no map when weather.conf has a url (verified: no
+  openstreetmap.org requests). The user tested switching both ways and
+  Log out on .239.
+- Deployed on the New unit (.239) by copying single files and
+  `install-web.sh --rebuild` (no apt, readings untouched), not by this
+  checkout's install.sh: it would install nep-fw-20210303's nep-firmware
+  over the board's 20230903. The board has no install.sh in
+  /usr/local/share/zlg. Its /etc/default/zlg: ZLG_WEATHER_SOURCE=weewx,
+  ZLG_WEATHER_URL=http://weather.home.arpa/zlg.json (lat/lon kept).
+  Leftovers on the board, deletable: ~/zlg-weather-deploy, ~/zlg-wsrc,
+  /etc/default/zlg.bak-weather, zlg-web-port.bak-20261111 and
+  /usr/local/sbin/zlg-admin.bak-20261111. The reserve (.238) has none of
+  this yet.
+- Outbound audit (2026-11-10, the user's question): with Local Weewx only
+  NTP was left (plus apt when run). Browser check of Overview, Energy
+  Output (/nep/output/day/0), Weather, Wi-Fi, Modules, Advanced: every
+  request to the gateway. NEP's views keep a commented-out nepviewer.com
+  logo (header_view, HTML comment), a PHP-commented weather.com string and
+  a Wikipedia link (General settings, click only).
+- Local NTP on .239 (the user's choice): the router 192.168.1.1 serves NTP
+  (stratum 3, within a few ms of the public pool; a rapid second query
+  gets a stratum-0 rate-limit reply); the DHCP lease names no NTP server.
+  /etc/systemd/timesyncd.conf.d/local-ntp.conf: NTP=192.168.1.1,
+  FallbackNTP= (empty). Synced (-5.6 ms). Not in the kit's image; README
+  section 7 documents the drop-in.
+
 ## README (2026-11-06)
 
 The user edits the README's wording; keep their decisions:
@@ -245,6 +305,9 @@ not the gateway. Cut by local-only: my_nsync/remote, gateway-mqtt-nep,
 critical_alert.php. NEP's binaries are closed source; one snapshot of the
 New unit showed no outside connections. Offered but not done: a day-long
 outbound connection log, an outbound firewall.
+Since 2026-11-10 the New unit uses Local Weewx and the router for NTP, so
+it contacts nothing outside the LAN except apt when run (see "Weather from
+a local weewx station").
 
 Email reports on the Old unit: off. /opt/config/report has r1-r3, a1, a2
 all 0; the recipient would come from /opt/config/general (`email`), which
