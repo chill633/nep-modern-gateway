@@ -39,6 +39,14 @@ Everything is built from source: mainline **U-Boot 2024.01** (SPL + U-Boot,
 with a new `zlg_m6g2c` board port), **Linux 6.12 LTS** with an M6G2C device
 tree, and a **Debian 13 "trixie" armhf** root filesystem.
 
+> **This branch is no longer updated** (since 11 November 2026). For a
+> gateway with NEP firmware 20210303, update its NEP firmware to
+> **20230903** first, then use the branch
+> [`nep-fw-20230903`](https://github.com/chill633/nep-modern-gateway/tree/nep-fw-20230903), which has every later
+> change and fix. The kit's MI Setup page (Advanced) is built only for
+> firmware 20230903 anyway. The development gateway itself ("Old") was
+> updated to 20230903 this way. This branch stays as it was for reference.
+
 > **NEP firmware 20210303.** This branch, `nep-fw-20210303`, is for gateways
 > running NEP firmware major version **20210303** (`major=` in the
 > `[version]` section of `/root/Gateway/gateway.cfg`), whose local web

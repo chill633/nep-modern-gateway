@@ -6,6 +6,11 @@ The box is an NEP solar gateway: 12 dual-panel microinverters, reported as 24
 modules (`data/1`-`24`) plus the gateway itself (`data/0`). README.md is the
 user documentation; this file is the working context.
 
+**nep-fw-20210303 is frozen (2026-11-11, the user's decision):** its
+README opens with a note that it is no longer updated (update the NEP
+firmware to 20230903 and use nep-fw-20230903). All work, shared parts
+included, now goes to nep-fw-20230903 only; no more merges between them.
+
 ## State (2026-11-05)
 
 Everything works on the board ("Old", the production unit until 2026-11-06;
