@@ -22,6 +22,7 @@ $zw_short = preg_replace(['~^http://~', '~/zlg\.json$~'], '', $zw_url);
 #zlg-wsrc .hint { color: #777; font-size: 11px; line-height: 14px; }
 #zlg-wsrc button { background: #3C633C; color: #fff; border: 0; border-radius: 4px; padding: 3px 12px; font-size: 12px; cursor: pointer; margin-top: 4px; }
 #zlg-wsrc button:disabled { opacity: .5; cursor: default; }
+#zlg-wsrc button.light { background: #dde6dd; color: #333; }
 #zlg-wsrc .msg { margin-top: 5px; }
 #zlg-wsrc .err { color: #b03020; }
 #zlg-wsrc .ok { color: #3c633c; }
@@ -48,7 +49,14 @@ $zw_short = preg_replace(['~^http://~', '~/zlg\.json$~'], '', $zw_url);
     <button type="button" id="zlg-wsrc-save">Save</button>
 <?php endif; ?>
   </form>
-<?php if (!$zw_in): ?>
+<?php if ($zw_in): ?>
+  <form method="post" action="<?php echo base_url(); ?>access/logout" style="margin-top:8px">
+    <input type="hidden" name="csrf" value="<?php echo $zh($zw_csrf); ?>"/>
+    <input type="hidden" name="page" value="info/index"/>
+    <span class="hint">Logged in for changes.</span>
+    <button type="submit" class="light">Log out</button>
+  </form>
+<?php else: ?>
   <form method="post" action="<?php echo base_url(); ?>access/login" style="margin-top:6px">
     <input type="hidden" name="csrf" value="<?php echo $zh($zw_csrf); ?>"/>
     <input type="hidden" name="page" value="info/index"/>
