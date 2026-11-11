@@ -16,10 +16,13 @@ ZLG_LOCAL_ONLY=0
 # Debian's PHP 8.4; 0: on ZLG's PHP 5.4 (zlg-chroot)
 ZLG_PHP84_CLI=1
 
-# Weather on the pages (zlg-weather, from Open-Meteo, replaces NEP's dead
-# Yahoo one); 0 keeps NEP's wea. Location: the gateway's General settings
-# (longitude/latitude), or set it here in decimal degrees:
+# Weather on the pages (zlg-weather replaces NEP's dead Yahoo one); 0 keeps
+# NEP's wea. From a weewx station: the URL of the zlg.json its zlg-json
+# report writes (README 7a), read every 10 minutes:
 ZLG_WEATHER=1
+#ZLG_WEATHER_URL=http://weather.home.arpa/zlg.json
+# Without a station: Open-Meteo, hourly, for the gateway's General settings
+# (longitude/latitude), or for this location in decimal degrees:
 #ZLG_WEATHER_LAT=
 #ZLG_WEATHER_LON=
 

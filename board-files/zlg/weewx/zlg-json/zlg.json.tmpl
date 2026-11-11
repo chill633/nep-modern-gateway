@@ -1,0 +1,17 @@
+## zlg.json for the NEP gateway's zlg-weather. Fixed units (°F, mph, in),
+## whatever the station's own; a missing value is null. Times are the
+## station's local time; "dateTime" is the record's epoch (UTC).
+{
+  "dateTime": $current.dateTime.raw,
+  "time": "$current.dateTime.format('%H:%M')",
+  "outTemp_F": $current.outTemp.degree_F.json(),
+  "outHumidity": $current.outHumidity.json(),
+  "windSpeed_mph": $current.windSpeed.mile_per_hour.json(),
+  "windDir": $current.windDir.json(),
+  "rainRate_inh": $current.rainRate.inch_per_hour.json(),
+  "dayRain_in": $day.rain.sum.inch.json(),
+  "dayHigh_F": $day.outTemp.max.degree_F.json(),
+  "dayLow_F": $day.outTemp.min.degree_F.json(),
+  "sunrise": "$almanac.sunrise.format('%H:%M')",
+  "sunset": "$almanac.sunset.format('%H:%M')"
+}

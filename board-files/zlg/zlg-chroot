@@ -246,13 +246,17 @@ php84_setup() {
 	mountpoint -q "$ROOT$PHP5" || mount --bind "$ROOT/m6g2c/php84" "$ROOT$PHP5"
 
 	# NEP's wea asked Yahoo's weather service (gone since 2019): mount
-	# zlg-weather (Open-Meteo) over it. ZLG_WEATHER=0 keeps NEP's.
+	# zlg-weather (a weewx station, or Open-Meteo) over it. ZLG_WEATHER=0
+	# keeps NEP's.
 	if [ "${ZLG_WEATHER:-1}" = 1 ] && [ -f "$WEATHER" ] && [ -f "$ROOT$WEA" ]; then
 		cp "$WEATHER" "$ROOT/m6g2c/zlg-weather.php"
 		rm -f "$ROOT/m6g2c/weather.conf"
+		if [ -n "${ZLG_WEATHER_URL:-}" ]; then
+			printf 'url = "%s"\n' "$ZLG_WEATHER_URL" >> "$ROOT/m6g2c/weather.conf"
+		fi
 		if [ -n "${ZLG_WEATHER_LAT:-}" ] && [ -n "${ZLG_WEATHER_LON:-}" ]; then
 			printf 'lat = "%s"\nlon = "%s"\n' "$ZLG_WEATHER_LAT" "$ZLG_WEATHER_LON" \
-				> "$ROOT/m6g2c/weather.conf"
+				>> "$ROOT/m6g2c/weather.conf"
 		fi
 		mountpoint -q "$ROOT$WEA" || mount --bind "$ROOT/m6g2c/zlg-weather.php" "$ROOT$WEA"
 	fi

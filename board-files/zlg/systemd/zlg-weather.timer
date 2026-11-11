@@ -1,0 +1,9 @@
+[Unit]
+Description=Weather from the local weewx station every 10 minutes
+
+[Timer]
+OnCalendar=*:2/10
+AccuracySec=30s
+
+[Install]
+WantedBy=zlg.target
