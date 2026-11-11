@@ -210,6 +210,10 @@ function view_edits(string $v): string
 		'~<td>Sunrise</td>~' => "<td><?php echo lang('lang_weather_map_sunrise');?></td>",
 		'~<td>Sunset</td>~' => "<td><?php echo lang('lang_weather_map_sunset');?></td>",
 		'~<td>Conditions</td>~' => "<td><?php echo lang('lang_weather_map_conditions');?></td>",
+		/* the Info (Weather) page: this kit's source switch under the
+		   weather table (views/zlg/weather_source.php) */
+		'~(<div id="weather"[^>]*>.*?</table>)~s'
+			=> "\$1\n<?php \$this->load->view('zlg/weather_source'); ?>",
 		/* the footer's version: this build's, not NEP's (NEP's
 		   /opt/config/version stays as it is for its own pages) */
 		'~<\?php echo file_get_contents\(\'/opt/config/version\'\);\s*\?>~'

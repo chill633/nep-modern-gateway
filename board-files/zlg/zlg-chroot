@@ -7,6 +7,7 @@
 #   zlg-chroot offset              update the clock offset (zlg-offset.timer)
 #   zlg-chroot run DIR CMD [ARG..] run CMD in DIR inside (the services use this)
 #   zlg-chroot local-only-off      exit 1 in local-only mode (zlg-mqtt.service)
+#   zlg-chroot weather             apply changed weather settings, fetch once
 #
 # Left out of ZLG's start-up on purpose, because Debian does it or because it
 # would disturb Debian: hwclock, ifconfig/udhcpc (eth0, wlan0), inetd,
@@ -204,6 +205,25 @@ PHP5=/opt/php5/bin/php
 WEA=/opt/php5/bin/wea
 WEATHER=/usr/local/lib/zlg/zlg-weather.php
 
+# zlg-weather's settings inside (/m6g2c/weather.conf): the station's URL
+# when the source is weewx (ZLG_WEATHER_SOURCE; weewx if unset and a URL is
+# set), and the Open-Meteo location. The Weather page's switch changes
+# /etc/default/zlg and runs "zlg-chroot weather".
+weather_conf() {
+	src=${ZLG_WEATHER_SOURCE:-}
+	[ -n "$src" ] || { [ -n "${ZLG_WEATHER_URL:-}" ] && src=weewx || src=openmeteo; }
+	f="$ROOT/m6g2c/weather.conf"
+	: > "$f.new"
+	if [ "$src" = weewx ] && [ -n "${ZLG_WEATHER_URL:-}" ]; then
+		printf 'url = "%s"\n' "$ZLG_WEATHER_URL" >> "$f.new"
+	fi
+	if [ -n "${ZLG_WEATHER_LAT:-}" ] && [ -n "${ZLG_WEATHER_LON:-}" ]; then
+		printf 'lat = "%s"\nlon = "%s"\n' "$ZLG_WEATHER_LAT" "$ZLG_WEATHER_LON" >> "$f.new"
+	fi
+	chmod 644 "$f.new"
+	mv "$f.new" "$f"
+}
+
 php84_setup() {
 	[ "${ZLG_PHP84_CLI:-1}" = 1 ] || return 0
 	[ -x /usr/bin/php8.4 ] || return 0
@@ -250,14 +270,7 @@ php84_setup() {
 	# keeps NEP's.
 	if [ "${ZLG_WEATHER:-1}" = 1 ] && [ -f "$WEATHER" ] && [ -f "$ROOT$WEA" ]; then
 		cp "$WEATHER" "$ROOT/m6g2c/zlg-weather.php"
-		rm -f "$ROOT/m6g2c/weather.conf"
-		if [ -n "${ZLG_WEATHER_URL:-}" ]; then
-			printf 'url = "%s"\n' "$ZLG_WEATHER_URL" >> "$ROOT/m6g2c/weather.conf"
-		fi
-		if [ -n "${ZLG_WEATHER_LAT:-}" ] && [ -n "${ZLG_WEATHER_LON:-}" ]; then
-			printf 'lat = "%s"\nlon = "%s"\n' "$ZLG_WEATHER_LAT" "$ZLG_WEATHER_LON" \
-				>> "$ROOT/m6g2c/weather.conf"
-		fi
+		weather_conf
 		mountpoint -q "$ROOT$WEA" || mount --bind "$ROOT/m6g2c/zlg-weather.php" "$ROOT$WEA"
 	fi
 }
@@ -305,6 +318,10 @@ offset) write_offset ;;
 stop) stop ;;
 shell) env_run /bin/sh -l ;;
 local-only-off) [ "${ZLG_LOCAL_ONLY:-0}" != 1 ] ;;
+weather)	# after a change of the weather settings: rewrite them, fetch once
+	mountpoint -q "$ROOT$WEA" || { echo "zlg-chroot: zlg-weather isn't set up (ZLG_WEATHER, PHP 8.4)" >&2; exit 1; }
+	weather_conf
+	env_run /opt/php5/bin/php "$WEA" ;;
 run)
 	[ $# -ge 3 ] || { echo "usage: zlg-chroot run DIR CMD [ARG...]" >&2; exit 2; }
 	dir=$2; shift 2

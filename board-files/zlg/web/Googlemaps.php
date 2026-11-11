@@ -8,7 +8,8 @@
  * Same interface as NEP's: initialize($config), add_marker($marker),
  * create_map(). The position is the weather location from /etc/default/zlg
  * (ZLG_WEATHER_LAT/LON, as /m6g2c/weather.conf) if set, else what the
- * controller passes (the gateway's General settings).
+ * controller passes (the gateway's General settings). With the weather from
+ * a weewx station (url in weather.conf) there is no map.
  */
 defined('BASEPATH') OR exit('No direct script access allowed');
 
@@ -55,6 +56,10 @@ class Googlemaps
 		$conf = '/m6g2c/weather.conf';
 		if (is_readable($conf)) {
 			$o = @parse_ini_file($conf);
+			/* the weather comes from a local weewx station: no map, and
+			   nothing loaded from openstreetmap.org */
+			if (($o['url'] ?? '') !== '')
+				return '';
 			if (is_numeric($o['lat'] ?? null) && is_numeric($o['lon'] ?? null))
 				$pos = array((float)$o['lat'], (float)$o['lon']);
 		}

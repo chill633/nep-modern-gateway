@@ -17,9 +17,12 @@ ZLG_LOCAL_ONLY=0
 ZLG_PHP84_CLI=1
 
 # Weather on the pages (zlg-weather replaces NEP's dead Yahoo one); 0 keeps
-# NEP's wea. From a weewx station: the URL of the zlg.json its zlg-json
-# report writes (README 7a), read every 10 minutes:
+# NEP's wea. The source (the Weather page's switch sets these two):
+# weewx, from a local weewx station, read every 10 minutes; or openmeteo.
+# Unset: weewx when ZLG_WEATHER_URL is set. ZLG_WEATHER_URL is the zlg.json
+# that the station's zlg-json report writes (README 7a).
 ZLG_WEATHER=1
+#ZLG_WEATHER_SOURCE=weewx
 #ZLG_WEATHER_URL=http://weather.home.arpa/zlg.json
 # Without a station: Open-Meteo, hourly, for the gateway's General settings
 # (longitude/latitude), or for this location in decimal degrees:
