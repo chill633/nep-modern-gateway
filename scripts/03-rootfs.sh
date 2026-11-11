@@ -186,6 +186,32 @@ DHCP=yes
 EOF
 in_chroot systemctl enable systemd-networkd.service systemd-resolved.service systemd-timesyncd.service
 
+# Time: Debian's public NTP pool unless NTP_SERVERS names a local source
+# (README section 7, "Time from the local network").
+NTP_CONF="$ROOTFS/etc/systemd/timesyncd.conf.d/local-ntp.conf"
+if [ -n "$NTP_SERVERS" ]; then
+	for s in $NTP_SERVERS; do
+		case "$s" in
+		*[!A-Za-z0-9.:-]*) die "NTP_SERVERS: \"$s\" isn't an IP address or host name" ;;
+		esac
+	done
+	mkdir -p "$(dirname "$NTP_CONF")"
+	{
+		echo "# from the build's NTP_SERVERS (config.env / local.env)"
+		echo "[Time]"
+		echo "NTP=$NTP_SERVERS"
+		[ "$NTP_FALLBACK" = 1 ] || echo "FallbackNTP="
+	} > "$NTP_CONF"
+	if [ "$NTP_FALLBACK" = 1 ]; then
+		log "time: NTP from $NTP_SERVERS, Debian's pool as the fallback"
+	else
+		log "time: NTP from $NTP_SERVERS only (no fallback to Debian's pool)"
+	fi
+else
+	rm -f "$NTP_CONF"
+	log "time: Debian's public NTP pool (NTP_SERVERS empty)"
+fi
+
 # ---- Wi-Fi: TP-Link TL-WN823N (rtl8xxxu) ----------------------------------
 # The kernel command line has net.ifnames=0, so the dongle is "wlan0".
 # udev starts wpa_supplicant@wlan0 only when the dongle is present. Enabling

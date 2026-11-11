@@ -390,6 +390,19 @@ puts the previous settings back if the new ones don't connect. By hand: edit
 the config file (`wpa_passphrase "SSID" "pass"` makes the `network={}`
 block), then `sudo systemctl restart wpa_supplicant@wlan0`.
 
+The clock is set over the network by `systemd-timesyncd`, from Debian's
+public NTP pool. To use an NTP server on your own network instead, such as
+the router, name it in `local.env` (IP addresses or host names, separated by
+spaces):
+
+```sh
+: "${NTP_SERVERS:=192.168.1.1}"
+```
+
+The image then takes its time only from there; `NTP_FALLBACK=1` keeps
+Debian's pool as the fallback. Section 7's "Time from the local network"
+does the same on a running gateway.
+
 **Signal.** The TL-WN823N sits under the Gateway's metal case, which
 weakens it. Where the signal is poor (seen at about -65 dBm with the
 receive rate down to 2 Mbit/s), the link drops every so often
@@ -624,8 +637,9 @@ systemctl list-units 'zlg*'
 * **Time from the local network.** If the router (or another machine on the
   network) serves NTP, the gateway can take its time from there instead of
   Debian's public servers; with a weewx station as well, nothing then
-  leaves the local network apart from `apt`. In
-  `/etc/systemd/timesyncd.conf.d/local-ntp.conf`:
+  leaves the local network apart from `apt`. An image built with
+  `NTP_SERVERS` (section 5a) is set up this way already. On a running
+  gateway, in `/etc/systemd/timesyncd.conf.d/local-ntp.conf`:
 
   ```
   [Time]
