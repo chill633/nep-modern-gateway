@@ -914,7 +914,8 @@ the report's findings, not even indirectly.
   wording. The local checkout is on nep-fw-20230903. The text below about
   merging and per-branch differences is history.
 - Branches per NEP firmware major version (`major=` under [version] in
-  /root/Gateway/gateway.cfg): **nep-fw-20210303** (default; the "Old"
+  /root/Gateway/gateway.cfg): **nep-fw-20210303** (the GitHub default
+  until 2026-11-11, now nep-fw-20230903; the "Old"
   unit, minor 03, local web interface works; renamed from
   claude/m6g2c-trixie-kit) and **nep-fw-20230903** (the "New" unit; NEP
   hides its local web interface, which the kit brings back). The New unit
