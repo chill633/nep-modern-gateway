@@ -613,8 +613,27 @@ systemctl list-units 'zlg*'
   servers (`systemd-timesyncd`), Debian's package servers only when `apt`
   runs (the automatic daily updates are off), and DHCP and DNS on the local
   network. The map on the Weather page is loaded by your browser from
-  OpenStreetMap, not by the gateway. NEP's own programs are closed source;
-  no connection from them to the outside has been seen.
+  OpenStreetMap, not by the gateway (with Local Weewx there is no map).
+  NEP's own programs are closed source; no connection from them to the
+  outside has been seen.
+* **Time from the local network.** If the router (or another machine on the
+  network) serves NTP, the gateway can take its time from there instead of
+  Debian's public servers; with a weewx station as well, nothing then
+  leaves the local network apart from `apt`. In
+  `/etc/systemd/timesyncd.conf.d/local-ntp.conf`:
+
+  ```
+  [Time]
+  NTP=192.168.1.1
+  FallbackNTP=
+  ```
+
+  then `sudo systemctl restart systemd-timesyncd`; `timedatectl
+  timesync-status` shows the server in use. The empty `FallbackNTP` keeps
+  it from falling back to Debian's servers; if the local server stops
+  answering, the board's RTC keeps the time meanwhile. NEP's software
+  depends on the clock (local times in its files and charts), so check
+  that the server's time is right first.
 * **Email reports** are NEP's, built hourly by `gene.sh`, and are off on
   both gateways: the report switches in `/opt/config/report` are all
   `0`, no recipient is set (`/opt/config/general`), and the jobs that would
