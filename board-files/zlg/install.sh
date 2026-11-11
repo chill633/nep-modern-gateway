@@ -22,7 +22,7 @@ install -m 644 systemd/*.service systemd/*.target systemd/*.path systemd/*.timer
 systemctl daemon-reload
 # the programs ZLG's system runs (zlg.target's Wants)
 for u in zlg-plc.service zlg-mqtt.service zlg-pctrl.service zlg-hmi.service \
-	 zlg-cron.service zlg-restart.path zlg-offset.timer; do
+	 zlg-cron.service zlg-restart.path zlg-offset.timer zlg-weather.timer; do
 	systemctl add-wants zlg.target "$u"
 done
 # ZLG's own web server, unless the PHP 8.4 one has replaced it on port 80

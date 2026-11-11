@@ -608,7 +608,8 @@ systemctl list-units 'zlg*'
   pages carry on; the pages' per-inverter status files come from `gdata.sh`
   -> `lsync` -> `php proxy`, which is local.
 * **What the gateway connects to,** with local-only mode on: Open-Meteo once
-  an hour for the weather (`api.open-meteo.com`, HTTPS), Debian's time
+  an hour for the weather (`api.open-meteo.com`, HTTPS; with a weewx station
+  set, 7a, the station on the local network instead), Debian's time
   servers (`systemd-timesyncd`), Debian's package servers only when `apt`
   runs (the automatic daily updates are off), and DHCP and DNS on the local
   network. The map on the Weather page is loaded by your browser from
@@ -716,17 +717,58 @@ scripts stay unchanged, and apt keeps the PHP patched. `ZLG_PHP84_CLI=0` in
 
 The weather on the pages comes from `zlg-weather` (`board-files/zlg/
 zlg-weather.php`), which `zlg-chroot` mounts over NEP's `wea`: NEP's asked
-Yahoo's weather service, which closed in 2019. It fetches today's forecast
+Yahoo's weather service, which closed in 2019. It writes today's weather in
+wea's format, from a local weewx station if one is set (below), otherwise
 from [Open-Meteo](https://open-meteo.com) (free, no API key, non-commercial
-use) once an hour, when NEP's `gene.sh` calls `wea`, and writes it in wea's
-format. The location is the longitude/latitude on the gateway's General
-settings page (`/root/Gateway/location`), or `ZLG_WEATHER_LAT` /
-`ZLG_WEATHER_LON` in `/etc/default/zlg`. It connects over IPv4 only:
+use): today's forecast, once an hour, when NEP's `gene.sh` calls `wea`. The
+Open-Meteo location is `ZLG_WEATHER_LAT` / `ZLG_WEATHER_LON` in
+`/etc/default/zlg`, or else the longitude/latitude on the gateway's General
+settings page (`/root/Gateway/location`). It connects over IPv4 only:
 networks that hand out NAT64 IPv6 addresses without a working IPv6 route
 would otherwise make every request time out. `ZLG_WEATHER=0` keeps NEP's.
 The weather shows on the status page (the bar above the inverter boxes) and
 on the Info page (**Weather** in the menu, `http://<board>/nep/info/index`),
-together with a map of the same location.
+together with a map of the Open-Meteo location.
+
+**Weather from a weewx station.** With a [weewx](https://weewx.com) (5.x)
+station on the network, the weather comes from it instead: today's high and
+low so far, sunrise and sunset, and as the conditions the current readings
+(for example "59°F, 59% RH, wind 2 mph SE"; with "Rain 0.12 in/h" first
+while it rains and the day's rain last once there is some). A small weewx
+report, `board-files/zlg/weewx/zlg-json`, writes them to `zlg.json` with
+each archive record, in fixed units whatever the station's own. On the
+weewx host (the skins folder is `/etc/weewx/skins` for a Debian package
+install, `~/weewx-data/skins` for a pip install):
+
+```bash
+sudo cp -r zlg-json /etc/weewx/skins/
+```
+
+then add a report under `[StdReport]` in `weewx.conf`, with `HTML_ROOT` set
+to the folder the station's web pages are served from (the one with its
+`index.html`), and restart weewx:
+
+```
+    [[ZlgJson]]
+        skin = zlg-json
+        enable = true
+        HTML_ROOT = /var/www/html/weewx
+```
+
+`sudo weectl report run ZlgJson` writes it once without waiting for the
+next record. On a gateway set up with an older kit, run the kit's
+`sudo sh install.sh` again first (it adds `zlg-weather.timer`). Then set the
+file's URL in `/etc/default/zlg`:
+
+```
+ZLG_WEATHER_URL=http://weather.home.arpa/zlg.json
+```
+
+and restart the NEP software (`sudo systemctl restart zlg.target`; the
+readings pause for about a minute). `zlg-weather.timer` then reads the
+station every 10 minutes, as well as `gene.sh`'s hourly run, and Open-Meteo
+isn't contacted. A reading more than 30 minutes old shows as "Station
+offline since HH:MM"; if the station doesn't answer, the last weather stays.
 
 **Settings pages.** After Weather, the menu has the gateway's settings,
 which NEP served as separate pages. Anyone on the network can view them;

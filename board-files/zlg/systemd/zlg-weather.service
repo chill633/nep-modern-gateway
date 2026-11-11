@@ -1,0 +1,11 @@
+[Unit]
+Description=Weather from the local weewx station for NEP's pages (ZLG_WEATHER_URL)
+After=zlg-chroot.service
+Requisite=zlg-chroot.service
+
+[Service]
+Type=oneshot
+# only with a station set (zlg-chroot writes url= when ZLG_WEATHER_URL is
+# set); NEP's hourly gene.sh runs the same program for Open-Meteo
+ExecCondition=/bin/grep -qs ^url /srv/zlg/m6g2c/weather.conf
+ExecStart=/usr/local/sbin/zlg-chroot run / /opt/php5/bin/php /opt/php5/bin/wea
