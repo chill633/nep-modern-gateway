@@ -237,8 +237,16 @@ IPv4-only fetches). The user installed the kit's report on it.
   (stratum 3, within a few ms of the public pool; a rapid second query
   gets a stratum-0 rate-limit reply); the DHCP lease names no NTP server.
   /etc/systemd/timesyncd.conf.d/local-ntp.conf: NTP=192.168.1.1,
-  FallbackNTP= (empty). Synced (-5.6 ms). Not in the kit's image; README
-  section 7 documents the drop-in.
+  FallbackNTP= (empty). Synced (-5.6 ms). README section 7 documents the
+  drop-in for a running gateway.
+- Build option (2026-11-11, the user's request): NTP_SERVERS (config.env;
+  site value in local.env, space-separated IPs/host names, checked against
+  [A-Za-z0-9.:-]) and NTP_FALLBACK (default 0). 03-rootfs.sh writes the
+  same drop-in (FallbackNTP= unless NTP_FALLBACK=1); empty = Debian's pool,
+  no drop-in. README 5a. Tested by running the block against a scratch
+  rootfs (empty, one server, two with fallback, a bad value); no image built
+  with it yet. The user's local.env doesn't set it yet. There is no
+  install-time switch for a running board (the manual drop-in covers it).
 
 ## README (2026-11-06)
 
