@@ -18,9 +18,9 @@ KVER=$(cat "$KINSTALL/boot/kernel-release")
 
 # ---- qemu-user for running armhf binaries in the chroot -----------------
 QEMU=$(command -v qemu-arm-static || command -v qemu-arm || true)
-[ -n "$QEMU" ] || die "qemu-user-static is not installed"
+[ -n "$QEMU" ] || die "no qemu-arm: install qemu-user-static (or, where it's gone, as on Ubuntu 26.04: qemu-user qemu-user-binfmt)"
 [ -e /proc/sys/fs/binfmt_misc/qemu-arm ] ||
-	die "binfmt_misc has no qemu-arm handler (install binfmt-support / qemu-user-static, or run: update-binfmts --enable qemu-arm)"
+	die "binfmt_misc has no qemu-arm handler (install binfmt-support with qemu-user-static, or qemu-user-binfmt; or run: update-binfmts --enable qemu-arm)"
 
 # ---- Keyring ----------------------------------------------------------------
 # The host's Debian archive keys. Retired keys are added too, so archived

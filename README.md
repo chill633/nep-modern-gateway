@@ -79,8 +79,8 @@ SD card
 
 ## 1. Host requirements
 
-An x86-64 Debian 12/13 or Ubuntu 22.04/24.04 machine (a VM is fine) with
-~15 GB free.
+An x86-64 Debian 12/13 or Ubuntu 22.04/24.04/26.04 machine (a VM is fine)
+with ~15 GB free.
 
 ```sh
 sudo apt install build-essential git bc bison flex libssl-dev libgnutls28-dev \
@@ -88,6 +88,15 @@ sudo apt install build-essential git bc bison flex libssl-dev libgnutls28-dev \
     device-tree-compiler gcc-arm-linux-gnueabihf kmod cpio rsync xz-utils lzop curl \
     debootstrap qemu-user-static binfmt-support debian-archive-keyring \
     fdisk e2fsprogs
+```
+
+**Ubuntu 26.04** has no `qemu-user-static` any more, so the line above
+stops there. Its replacement is `qemu-user` with `qemu-user-binfmt`, which
+registers the ARM emulator for the rootfs stage's chroot; put them in place
+of `qemu-user-static` (the two kinds can't be installed together):
+
+```sh
+sudo apt install qemu-user qemu-user-binfmt
 ```
 
 `lzop` is needed because the kernel is LZO-compressed (it decompresses

@@ -552,7 +552,7 @@ was run and the copies were deleted.
   Deployed on .239 and (once it was back on, 2026-11-09 13:30) on .238;
   both run the same kit code (install scripts identical to the branch).
   The build tree is synced to nep-fw-20230903 on request (git archive
-  over it; last 2026-11-09); a CLAUDE.md-only commit after a sync leaves
+  over it; last 2026-11-11, see below); a CLAUDE.md-only commit after a sync leaves
   just that file behind, which doesn't affect builds.
 - Panel 9 (New unit's numbering; one input of inverter 9/10), 2026-11-09:
   low output not caused by the writes: on 11-07 it matched panel 10, on
@@ -732,10 +732,24 @@ keep it as the emergency reserve for the New unit. For a swap:
   .238). The code came after the 2026-11-05 image, so no install from an
   image's copy had run it before.
 - Build tree ~/Working/m6g2c-trixie synced to nep-fw-20230903 on
-  2026-11-09 (git archive over it; local.env, out/, work/ and
-  board-files/zlg/web/deps kept). out/ still holds the image written to
-  the reserve's card (old install scripts); the next rootfs + image
-  build carries the fixes.
+  2026-11-09, and again on 2026-11-11 at ec21032 (git archive over it;
+  local.env, out/, work/ and board-files/zlg/web/deps kept; it never had
+  a zlg-time.so, which the rootfs stage compiles). Its local.env (and the
+  checkout's, both git-ignored) set NTP_SERVERS=192.168.1.1.
+- Fresh image 2026-11-11 00:05 (the user ran `sudo ./build.sh rootfs`
+  and `image`; U-Boot from 11-05 and the kernel from 11-08 reused, both
+  unchanged since): out/m6g2c-debian-trixie-armhf.img(.xz, .sha256 OK).
+  The host (Ubuntu 26.04.1) needed qemu-user-binfmt for the rootfs
+  stage's emulated chroot (the user installed it): 26.04 has no
+  qemu-user-static, and qemu-user-binfmt Breaks it. README section 1 now
+  gives the 26.04 variant (qemu-user qemu-user-binfmt); 03-rootfs.sh's
+  error messages name both. Checked without root (partitions extracted, read
+  with debugfs): local-ntp.conf (NTP=192.168.1.1, FallbackNTP=),
+  nep-firmware 20230903, hostname m6g2c, ten weather/Weather-page/admin
+  files byte-identical to the branch, the Wi-Fi passphrase nowhere in
+  plain text (wpa conf holds the derived psk). It carries the install
+  script fixes and both Wi-Fi drivers. Not written to a card yet; the
+  reserve's card (.238) still has the 11-08 image.
 
 Wi-Fi at the New unit's production spot (2026-11-06, log read only): the
 link is weak (-64 to -68 dBm, rx bitrate 2 Mbit/s, repeated
@@ -963,8 +977,8 @@ the report's findings, not even indirectly.
   pages and the Old unit's data, screenshots) were deleted at the user's
   request: ask for the passwords again before working on a board.
 - Local files outside the repository, in ~/Working: m6g2c-trixie/ (the
-  build tree; out/m6g2c-debian-trixie-armhf.img(.xz) from 2026-11-05, used
-  for both units' SD cards), zlg-migrate.tar.gz (the last board bundle
+  build tree; out/m6g2c-debian-trixie-armhf.img(.xz): 2026-11-05 for the
+  New unit's card, 2026-11-08 for the reserve's, now the 2026-11-11 build), zlg-migrate.tar.gz (the last board bundle
   built from the checkout) and zlg-nep.tar.gz (NEP's web bundle from the
   Old unit; moved out of the repository folder, the only copy). The
   repository folder holds no vendor files; zlg-*.tar.gz is git-ignored
