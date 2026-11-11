@@ -721,7 +721,8 @@ keep it as the emergency reserve for the New unit. For a swap:
   the kit's default is 0), zlg-import (firmware check passed), zlg.target,
   install-web.sh, --switch (port 80), MI password from its serial. No
   outside connections; zlg-mqtt skipped; plc_id.conf empty. It's the
-  reserve; the user plans to shut it down. Before the card was rewritten
+  reserve; the user plans to shut it down. (That card was rewritten with
+  the 2026-11-11 image and is not set up yet: see below.) Before the card was rewritten
   the user saved its old /srv/zlg (NEP firmware 20210303 copy) as
   ~/Working/nep-local/old-sd-srv-zlg-20210303.tgz (root-owned; local only).
 - Two kit bugs found on that card, fixed: install.sh copied nep-firmware(.sh)
@@ -748,8 +749,19 @@ keep it as the emergency reserve for the New unit. For a swap:
   nep-firmware 20230903, hostname m6g2c, ten weather/Weather-page/admin
   files byte-identical to the branch, the Wi-Fi passphrase nowhere in
   plain text (wpa conf holds the derived psk). It carries the install
-  script fixes and both Wi-Fi drivers. Not written to a card yet; the
-  reserve's card (.238) still has the 11-08 image.
+  script fixes and both Wi-Fi drivers.
+- Written 2026-11-11 over the reserve's card (the user's choice; TS4 card
+  reader, /dev/sdb on the workstation, 29.1 GB) by the user with
+  tools/write-sdcard.sh, which verified it; afterwards the card showed the
+  image's layout (rootfs 1.9 GB, grows at first boot). The card is a fresh
+  system again (hostname m6g2c, debian/debian, forced password change):
+  the reserve's earlier setup on it (copied /etc/default/zlg, zlg-import,
+  install-web.sh --switch, MI password) is gone. **Not set up yet; the
+  user chose to do it later**, with the Old unit booted from the card
+  (it may get a new address; .238 before): copy /etc/default/zlg from the
+  New unit first (local-only, weewx source), then README 7/7a as on
+  2026-11-08. Until then the reserve isn't a ready drop-in for the New
+  unit.
 
 Wi-Fi at the New unit's production spot (2026-11-06, log read only): the
 link is weak (-64 to -68 dBm, rx bitrate 2 Mbit/s, repeated
