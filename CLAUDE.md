@@ -906,6 +906,13 @@ the report's findings, not even indirectly.
   checkout: ~/Working/nep-modern-gateway. gh is installed and logged in
   (delete_repo scope added 2026-11-07 for the recreate; the user may
   remove it).
+- **nep-fw-20210303 is frozen (2026-11-11, the user's decision):** its
+  README opens with a note that it is no longer updated (update the NEP
+  firmware to 20230903, use this branch); this branch's README says the
+  same at the top and in 7a. All work, shared parts included, now goes to
+  nep-fw-20230903 directly: no more merges, worktrees or per-branch README
+  wording. The local checkout is on nep-fw-20230903. The text below about
+  merging and per-branch differences is history.
 - Branches per NEP firmware major version (`major=` under [version] in
   /root/Gateway/gateway.cfg): **nep-fw-20210303** (default; the "Old"
   unit, minor 03, local web interface works; renamed from

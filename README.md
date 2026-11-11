@@ -43,9 +43,12 @@ tree, and a **Debian 13 "trixie" armhf** root filesystem.
 
 > **NEP firmware 20230903.** This branch, `nep-fw-20230903`, is for
 > gateways running NEP firmware major version **20230903** (`major=` in the
-> `[version]` section of `/root/Gateway/gateway.cfg`). Gateways with
-> firmware 20210303 use the branch `nep-fw-20210303`. `zlg-import` and
+> `[version]` section of `/root/Gateway/gateway.cfg`). `zlg-import` and
 > `install-web.sh` check the version and stop on a mismatch (section 7).
+> For a gateway with firmware 20210303, update its NEP firmware to
+> 20230903 first: the branch `nep-fw-20210303` is no longer updated (since
+> 11 November 2026) and stays only for reference. The development gateway
+> ("Old") was updated that way.
 >
 > Firmware 20230903 runs on the same hardware and has the same web pages as
 > 20210303. NEP only hides the pages: its boot script renames `index.php`,
@@ -716,8 +719,9 @@ port 80 and stops ZLG's; `--revert` goes back.
   page by page in the browser on a 20230903 gateway, so run `--switch`
   right after installing. NEP's own server shows nothing on this firmware,
   so there is nothing to compare.
-* **Firmware 20210303:** use the `nep-fw-20210303` branch. There the port
-  was verified page by page against ZLG's server, so the same holds.
+* **Firmware 20210303:** update the NEP firmware to 20230903 first. The
+  `nep-fw-20210303` branch, where the port was verified page by page
+  against ZLG's server, is no longer updated.
 * **Any other NEP version:** its pages and code haven't been through the
   port yet. Compare `http://<board>:8080/` with ZLG's `http://<board>/`
   first, check `journalctl -u zlg-web-fpm` for PHP errors, and switch once
