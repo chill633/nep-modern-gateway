@@ -2,8 +2,9 @@
 <?php
 /*
  * zlg-admin: the privileged side of the web interface's settings pages
- * (Wi-Fi, Modules, Advanced). Runs as root outside /srv/zlg; the pages (PHP in
- * zlg-web-fpm, www-data, chrooted) talk to it over a Unix socket:
+ * (Wi-Fi, Modules, Advanced; the Weather page's source). Runs as root
+ * outside /srv/zlg; the pages (PHP in zlg-web-fpm, www-data, chrooted)
+ * talk to it over a Unix socket:
  *
  *   zlg-admin.socket  /run/zlg/admin.sock (inside /srv/zlg: /m6g2c/run/admin.sock),
  *                     group www-data; one zlg-admin@.service per connection,
@@ -1147,6 +1148,117 @@ function op_mi_set_profile(array $req): array
 	return ['reply' => 'ok'];
 }
 
+/* ---- weather source (the Weather page) ---------------------------------- */
+
+const ZLG_DEFAULT = '/etc/default/zlg';
+
+/* VAR=value lines of /etc/default/zlg (plain values; no shell expansion) */
+function zlg_default_get(): array
+{
+	$v = [];
+	foreach (preg_split('/\R/', (string)@file_get_contents(ZLG_DEFAULT)) as $l)
+		if (preg_match('/^(ZLG_\w+)=(.*)$/', $l, $m))
+			$v[$m[1]] = trim($m[2], " \t\"'");
+	return $v;
+}
+
+/* set VAR=value: replace its line, or a commented-out "#VAR=" line, or
+   append. Values are checked by the callers (no quotes, spaces or $). */
+function zlg_default_set(array $vars): void
+{
+	$text = (string)@file_get_contents(ZLG_DEFAULT);
+	foreach ($vars as $k => $v) {
+		preg_match('/^[A-Z0-9_]+$/', $k) && !preg_match('/[\s"\'$`\\\;&|<>()]/', $v)
+			|| fail("bad value for $k");
+		$line = "$k=$v";
+		if (preg_match('/^' . $k . '=.*$/m', $text))
+			$text = preg_replace('/^' . $k . '=.*$/m', $line, $text, 1);
+		elseif (preg_match('/^#' . $k . '=.*$/m', $text))
+			$text = preg_replace('/^#' . $k . '=.*$/m', $line, $text, 1);
+		else
+			$text = rtrim($text, "\n") . "\n$line\n";
+	}
+	put_atomic(ZLG_DEFAULT, $text, 0644);
+}
+
+function weather_source(array $d): string
+{
+	$s = $d['ZLG_WEATHER_SOURCE'] ?? '';
+	if ($s !== 'weewx' && $s !== 'openmeteo')
+		$s = ($d['ZLG_WEATHER_URL'] ?? '') !== '' ? 'weewx' : 'openmeteo';
+	return $s;
+}
+
+function op_weather_get(array $req): array
+{
+	$d = zlg_default_get();
+	return ['enabled' => ($d['ZLG_WEATHER'] ?? '1') === '1',
+		'source' => weather_source($d), 'url' => $d['ZLG_WEATHER_URL'] ?? ''];
+}
+
+/* "192.168.1.20", "weather.lan", "http://weather.lan/" -> .../zlg.json */
+function weather_url(string $in): string
+{
+	$in = trim($in);
+	$in !== '' || fail("enter the weather station's address");
+	if (!preg_match('~^[a-z][a-z0-9+.-]*://~i', $in))
+		$in = "http://$in";
+	$u = parse_url($in);
+	($u && in_array(strtolower($u['scheme'] ?? ''), ['http', 'https'], true) && !empty($u['host'])
+	 && !isset($u['user']) && !isset($u['pass']) && !isset($u['query']) && !isset($u['fragment']))
+		|| fail('the address should look like 192.168.1.20, weather.lan or http://weather.lan/zlg.json');
+	preg_match('/^(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)$/', $u['host']) || fail('the host name has characters it can\'t have');
+	$path = ($u['path'] ?? '') ?: '/';
+	if (str_ends_with($path, '/'))
+		$path .= 'zlg.json';
+	preg_match('#^/[A-Za-z0-9._~/-]*$#', $path) || fail('the path has characters it can\'t have');
+	return strtolower($u['scheme']) . '://' . $u['host'] . (isset($u['port']) ? ':' . (int)$u['port'] : '') . $path;
+}
+
+/* the station's zlg.json must be there and complete before it's used */
+function weather_probe(string $url): array
+{
+	$ctx = stream_context_create([
+		'http' => ['timeout' => 10, 'user_agent' => 'zlg-admin (EPC-M6G2C gateway)', 'ignore_errors' => true],
+		'ssl' => ['verify_peer' => true],
+		'socket' => ['bindto' => '0:0'],	/* IPv4: see zlg-weather */
+	]);
+	$res = @file_get_contents($url, false, $ctx);
+	if ($res === false)
+		fail("no answer from $url");
+	$code = 0;
+	foreach (http_get_last_response_headers() ?? [] as $h)
+		if (preg_match('~^HTTP/\S+\s+(\d+)~', $h, $m))
+			$code = (int)$m[1];
+	$code === 200 || fail("$url answered HTTP $code" . ($code === 404 ? ': is the zlg-json report installed on the weather station (README 7a)?' : ''));
+	$w = json_decode($res, true);
+	(is_array($w) && is_numeric($w['dateTime'] ?? null) && is_numeric($w['dayHigh_F'] ?? null))
+		|| fail("$url isn't the zlg-json report's file");
+	return $w;
+}
+
+function op_weather_set(array $req): array
+{
+	need_token($req);
+	$d = zlg_default_get();
+	($d['ZLG_WEATHER'] ?? '1') === '1' || fail('the weather is turned off (ZLG_WEATHER=0 in /etc/default/zlg)');
+	$src = (string)($req['source'] ?? '');
+	in_array($src, ['weewx', 'openmeteo'], true) || fail('choose a source');
+	$set = ['ZLG_WEATHER_SOURCE' => $src];
+	if ($src === 'weewx' || trim((string)($req['url'] ?? '')) !== '') {
+		$url = weather_url((string)($req['url'] ?? ''));
+		if ($src === 'weewx')
+			weather_probe($url);
+		$set['ZLG_WEATHER_URL'] = $url;
+	}
+	zlg_default_set($set);
+	$out = run(['/usr/local/sbin/zlg-chroot', 'weather'], $rc);
+	syslog(LOG_INFO, "weather source: $src" . ($src === 'weewx' ? " ($set[ZLG_WEATHER_URL])" : ''));
+	$rc === 0 && str_contains($out, 'Done')
+		|| fail('saved, but fetching the weather failed: ' . trim(preg_replace('/^.*get weather\.\.\.\.?/s', '', $out) ?: 'no output'));
+	return ['source' => $src, 'url' => $set['ZLG_WEATHER_URL'] ?? ($d['ZLG_WEATHER_URL'] ?? '')];
+}
+
 /* ---- the request loop -------------------------------------------------- */
 
 const OPS = [
@@ -1171,6 +1283,8 @@ const OPS = [
 	'mi.report_start' => 'op_mi_report_start',
 	'mi.report_status' => 'op_mi_report_status',
 	'mi.report_get' => 'op_mi_report_get',
+	'weather.get' => 'op_weather_get',
+	'weather.set' => 'op_weather_set',
 ];
 
 function serve(): void

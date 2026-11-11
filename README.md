@@ -745,9 +745,10 @@ install, `~/weewx-data/skins` for a pip install):
 sudo cp -r zlg-json /etc/weewx/skins/
 ```
 
-then add a report under `[StdReport]` in `weewx.conf`, with `HTML_ROOT` set
-to the folder the station's web pages are served from (the one with its
-`index.html`), and restart weewx:
+then add a report under `[StdReport]` in `weewx.conf` and restart weewx.
+`HTML_ROOT` is weewx's default web folder, `/var/www/html/weewx`; change it
+only if the station's pages (its `index.html`) are served from another
+folder:
 
 ```
     [[ZlgJson]]
@@ -758,23 +759,32 @@ to the folder the station's web pages are served from (the one with its
 
 `sudo weectl report run ZlgJson` writes it once without waiting for the
 next record. On a gateway set up with an older kit, run the kit's
-`sudo sh install.sh` again first (it adds `zlg-weather.timer`). Then set the
-file's URL in `/etc/default/zlg`:
+`sudo sh install.sh` and `sudo sh web/install-web.sh` again first (they add
+`zlg-weather.timer` and the Weather page's switch).
 
-```
-ZLG_WEATHER_URL=http://weather.home.arpa/zlg.json
-```
+Then choose the source on the **Weather** page (`/nep/info/index`), under
+the weather table: **Open-Meteo, with map** or **Local Weewx**, with the
+station's IP address, name or the URL of its `zlg.json` (`192.168.1.20`
+becomes `http://192.168.1.20/zlg.json`). Changing it needs the settings
+password (the login is in the same box). Before saving Local Weewx, the
+gateway reads the station's `zlg.json` and refuses an address that doesn't
+answer with it; after saving it fetches the weather once, so the page shows
+the new source at once, without a restart. With Local Weewx the page has no
+map, and nothing is loaded from OpenStreetMap.
 
-and restart the NEP software (`sudo systemctl restart zlg.target`; the
-readings pause for about a minute). `zlg-weather.timer` then reads the
-station every 10 minutes, as well as `gene.sh`'s hourly run, and Open-Meteo
-isn't contacted. A reading more than 30 minutes old shows as "Station
-offline since HH:MM"; if the station doesn't answer, the last weather stays.
+The switch writes `ZLG_WEATHER_SOURCE` (`weewx` or `openmeteo`) and
+`ZLG_WEATHER_URL` in `/etc/default/zlg`; they can be set there by hand too
+(then `sudo zlg-chroot weather`, or restart the NEP software). Without
+`ZLG_WEATHER_SOURCE`, a set `ZLG_WEATHER_URL` means weewx.
+`zlg-weather.timer` reads the station every 10 minutes, as well as
+`gene.sh`'s hourly run, and Open-Meteo isn't contacted. A reading more than
+30 minutes old shows as "Station offline since HH:MM"; if the station
+doesn't answer, the last weather stays.
 
 **Settings pages.** After Weather, the menu has the gateway's settings,
 which NEP served as separate pages. Anyone on the network can view them;
 changes need the settings password, `gateway` at first, changed on any of
-the three pages (`sudo zlg-admin --reset-password` sets it back). The work
+the three pages (the Weather page's source switch uses it too) (`sudo zlg-admin --reset-password` sets it back). The work
 is done by `zlg-admin`, a helper running as root outside `/srv/zlg`, which
 checks every request itself; the pages reach it over a socket
 (`zlg-admin.socket`, `/run/zlg/admin.sock`).

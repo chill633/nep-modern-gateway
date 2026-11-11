@@ -95,9 +95,10 @@ class Zlg_admin {
 			->set_output(json_encode($r, JSON_INVALID_UTF8_SUBSTITUTE));
 	}
 
-	/* the pages that have a login box (Access::login redirects back to one) */
+	/* the pages that have a login box (Access::login redirects back to one;
+	   info/index is the Weather page, for its source switch) */
 	public static function page_ok(string $p): bool
 	{
-		return in_array($p, ['wifi', 'modules', 'advanced'], true);
+		return in_array($p, ['wifi', 'modules', 'advanced', 'info/index'], true);
 	}
 }
