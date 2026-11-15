@@ -933,13 +933,29 @@ image or by zlg/install.sh.
 
 ## Workstation rebuilt after a disk failure (2026-11-14)
 
-The user's disk failed; ~/Working was restored from a backup and this
-checkout is a fresh clone (2026-11-15). Until checked otherwise: gh isn't
-installed; SSH to .239 is by key (debian), sudo there still needs the
-password, so the user runs root steps. The local-only files listed under
-"Repository and access" and the security report weren't in ~/Working on
-2026-11-15: ask the user before assuming they exist. The backup's
-m6g2c-buster/ is an early snapshot of this kit (2026-11-04), superseded.
+The user's disk failed. This checkout is a fresh clone (2026-11-15), so it
+is safe to push from. gh is installed and logged in again (chill633, SSH);
+git pushes by SSH key. SSH to .239 is by key (debian); sudo there still
+needs the password, so the user runs root steps.
+
+**Lost with the disk (the user, 2026-11-15; to be recreated at some
+point):** every local-only file this document mentions elsewhere as being
+in ~/Working:
+- NEP-BDG-256-security-report.md, the vendor security report. Its findings
+  are in no committed file by design, so it has to be redone from the
+  gateway's software (/srv/zlg on the boards). ~/Working/testing.txt, a
+  note of the user's for it, survived; it stays local.
+- nep-modern-gateway-backup-20261107.git, the pre-rewrite history. Gone for
+  good, which doesn't matter for the work.
+- zlg-nep.tar.gz, NEP's web bundle from the Old unit (was the only copy);
+  the Old unit's /srv/zlg or NAND is the source for a new one.
+- m6g2c-trixie/, the build tree and the built images, and
+  zlg-migrate.tar.gz: rebuild with ./build.sh (README sections 1 and 2;
+  local.env with the Wi-Fi settings is back in the checkout, git-ignored).
+- The session scratch folders and anything else outside the repository.
+Where other sections say these files exist, this section wins. A backup
+snapshot of an early version of this kit (m6g2c-buster, 2026-11-04) was
+deleted on 2026-11-15, superseded by this repository.
 
 ## Vendor security report (2026-11-06)
 
