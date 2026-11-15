@@ -6,6 +6,13 @@ whole system, N>=1 an inverter) and publishes them with Home Assistant MQTT
 discovery, so the gateway and every inverter appear in HA as devices.
 Nothing is sent anywhere but the configured broker.
 
+Power is worked out from the inverters' energy counters (how much each rose
+over the last power_window seconds), not taken from the power figure they
+report: on the user's 800B inverters that figure was wrong by a factor that
+changed through the day (2026-11-15: 3.7 kW reported while the counters and
+the EG4 GridBOSS's AC-couple meter both showed about 0.6 kW). The reported
+figure is published as a diagnostic sensor, "Power (inverter reading)".
+
     nep-mqtt --config /etc/nep-mqtt.conf
     nep-mqtt --config nep-mqtt.conf --dry-run     # print, don't connect
 
@@ -13,12 +20,15 @@ Needs python3-paho-mqtt 2.x (not for --dry-run). README section 7b.
 """
 import argparse
 import configparser
+import collections
+import datetime
 import json
 import logging
 import re
 import signal
 import sys
 import threading
+import time
 import urllib.parse
 import urllib.request
 
@@ -44,15 +54,24 @@ DEFAULTS = {
         "serial": "",
         # raw Temperature / this = degrees C
         "temperature_divisor": "10",
+        # power = energy counter's rise over this many seconds
+        "power_window": "600",
     },
 }
 
 OFFLINE = 0x8000  # status bit: the gateway has no current data for the inverter
 
+MIN_SPAN = 120   # shortest power_window
+STALE = 300      # seconds without a counter change before it counts as slowing
+
+# sensors shown under "Diagnostic" in Home Assistant
+DIAGNOSTIC = {"reported_power"}
+
 # key, name, unit, device_class, state_class, display precision
 SYSTEM_SENSORS = [
     ("power", "Power", "W", "power", "measurement", 0),
     ("peak_power", "Peak power today", "W", "power", "measurement", 0),
+    ("reported_power", "Power (inverter reading)", "W", "power", "measurement", 0),
     ("energy_today", "Energy today", "kWh", "energy", "total_increasing", 2),
     ("energy_total", "Energy total", "kWh", "energy", "total_increasing", 1),
     ("ac_voltage", "AC voltage", "V", "voltage", "measurement", 1),
@@ -62,6 +81,7 @@ SYSTEM_SENSORS = [
 INVERTER_SENSORS = [
     ("power", "Power", "W", "power", "measurement", 0),
     ("peak_power", "Peak power today", "W", "power", "measurement", 0),
+    ("reported_power", "Power (inverter reading)", "W", "power", "measurement", 0),
     ("energy_today", "Energy today", "kWh", "energy", "total_increasing", 3),
     ("energy_total", "Energy total", "kWh", "energy", "total_increasing", 1),
     ("dc_voltage", "DC voltage", "V", "voltage", "measurement", 2),
@@ -142,6 +162,10 @@ class Bridge:
         self.avail = self.base + "/bridge/status"
         self.tdiv = float(self.gw["temperature_divisor"]) or 1.0
         self.last_total = {}  # module -> last good lifetime energy (Wh)
+        self.window = max(MIN_SPAN, float(self.gw["power_window"]))
+        self.history = {}     # module -> deque of (monotonic time, lifetime Wh, changed)
+        self.first_seen = {}  # module -> time of the first sample
+        self.peak = {}        # module -> (date, highest power that day)
 
     # ---- topics and discovery -------------------------------------------
     def state_topic(self, n):
@@ -180,6 +204,8 @@ class Bridge:
                     p["unit_of_measurement"] = unit
                 if dclass:
                     p["device_class"] = dclass
+                if key in DIAGNOSTIC:
+                    p["entity_category"] = "diagnostic"
                 out.append(("%s/sensor/%s_%s/config" % (prefix, uid_base, key), p))
             if n:
                 out.append(("%s/binary_sensor/%s_online/config" % (prefix, uid_base), {
@@ -201,13 +227,72 @@ class Bridge:
             self.last_total[n] = last = wh
         return None if last is None else round(last / 1000.0, 3)
 
-    def convert(self, n, d):
+    def counter_power(self, n, now):
+        """W from the lifetime counter's rise, measured between the times it
+        changed (the gateway refreshes an inverter only every 2-4 minutes,
+        and the counter counts whole Wh), over about the last window. None
+        until two changes have been seen (the first sample's time isn't the
+        time of a change) or a window has passed. 0 when the counter hasn't
+        moved for a window."""
+        wh = self.last_total.get(n)
+        if wh is None:
+            return None
+        h = self.history.setdefault(n, collections.deque())
+        if h and wh < h[-1][1]:
+            h.clear()
+        if not h:
+            self.first_seen[n] = now
+            h.append((now, wh, False))    # not a change: start point only
+        elif wh != h[-1][1]:
+            h.append((now, wh, True))
+            if not h[0][2] and len(h) > 2:
+                h.popleft()               # two real changes now
+        # keep exactly one change at least a window old, as the start point
+        while len(h) > 2 and now - h[1][0] >= self.window:
+            h.popleft()
+        if len(h) < 2 or not h[0][2]:
+            if now - self.first_seen[n] < self.window:
+                return None
+            if len(h) == 1:
+                return 0.0                # no change for a whole window
+            # only one change after a whole window (low output): measure
+            # from the first sample, whose time is off by at most one
+            # gateway refresh
+        (t0, wh0, _), (t1, wh1, _) = h[0], h[-1]
+        if now - t1 >= self.window:
+            return 0.0                    # no change for a whole window
+        # no change for a while: less output than the counter's last pace,
+        # so measure up to now instead of up to the last change
+        if now - t1 > STALE:
+            t1 = now
+        return round((wh1 - wh0) * 3600.0 / (t1 - t0), 1)
+
+    def peak_today(self, n, power):
+        """highest counter-based power today (since the service started,
+        if it started today)"""
+        today = datetime.date.today()
+        day, best = self.peak.get(n, (today, None))
+        if day != today:
+            best = None
+        if power is not None and (best is None or power > best):
+            best = power
+        self.peak[n] = (today, best)
+        return best
+
+    def convert(self, n, d, now=None):
         # NEP's field names are swapped: "today" is the lifetime energy and
-        # "total" is today's, both in Wh. Power and peak are in mW.
-        s = {"power": round(d["power"] / 1000.0, 1),
-             "peak_power": round(d["peak"] / 1000.0, 1),
+        # "total" is today's, both in Wh. Power is in mW.
+        now = time.monotonic() if now is None else now
+        energy_total = self.total_kwh(n, d["today"])
+        # the system's counter is a sum that refills inverter by inverter
+        # after NEP's gateway-plc restarts (a burst): poll() adds up the
+        # inverters' powers for it instead
+        power = self.counter_power(n, now) if n else None
+        s = {"power": power,
+             "peak_power": self.peak_today(n, power) if n else None,
+             "reported_power": round(d["power"] / 1000.0, 1),
              "energy_today": round(d["total"] / 1000.0, 3),
-             "energy_total": self.total_kwh(n, d["today"])}
+             "energy_total": energy_total}
         if n == 0:
             s["ac_voltage"] = round(d["AC_voltage"] / 10.0, 1) or None
             s["frequency"] = round(d["AC_frequency"] / 100.0, 2) or None
@@ -217,9 +302,12 @@ class Bridge:
         s["status"] = d["status"]
         s["firmware"] = "%04X" % d["MI_Version"] if d["MI_Version"] else None
         if online:
+            ac_v = round(d["AC_voltage"] / 10.0, 1)
+            # the reported AC current is off by the same factor as the
+            # reported power: work it out from the counter-based power
             s.update(dc_voltage=round(d["DC_voltage"] / 100.0, 2),
-                     ac_voltage=round(d["AC_voltage"] / 10.0, 1),
-                     ac_current=round(d["AC_current"] / 100.0, 2),
+                     ac_voltage=ac_v,
+                     ac_current=round(power / ac_v, 2) if power is not None and ac_v else None,
                      frequency=round(d["AC_frequency"] / 100.0, 2),
                      temperature=round(d["Temperature"] / self.tdiv, 1))
         else:
@@ -237,6 +325,10 @@ class Bridge:
             online += s["online"]
             out.append((self.state_topic(n), s))
         system["inverters_online"] = online
+        # an inverter that isn't reporting (night, unplugged) adds nothing
+        powers = [st["power"] if st["power"] is not None or st["online"] else 0.0 for _, st in out]
+        system["power"] = None if None in powers else round(sum(powers), 1)
+        system["peak_power"] = self.peak_today(0, system["power"])
         return [(self.state_topic(0), system)] + out
 
 

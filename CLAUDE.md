@@ -932,6 +932,40 @@ image or by zlg/install.sh.
 - Topics and unique IDs contain the gateway serial (read from
   /root/Gateway/sn at run time); keep examples in docs as <gateway serial>.
 
+### Power from the energy counters (2026-11-15)
+
+The user saw 3.7 kW at 15:15 while expecting < 750 W. The EG4 GridBOSS's
+AC-couple port read ~600 W and 11.2 kWh for the day; the gateway's energy
+counters ~650 W (rise over 15 min) and 11.4 kWh: **counters right, NEP's
+power figure (and AC current, = P/V) wrong.** Pattern on every day since
+11-10 (11-09 13:00 still agreed): reported power low in the morning, 2-6x
+high in the afternoon; no fixed lag fits. After gateway-plc restarted
+(15:34, after someone's MI Setup Mode session at 15:23-15:26 stopped
+zlg-plc for 10 idle minutes) the figure was plausible again (~580 W). Lead,
+not proven: min.dat column 10 (after the day's kWh) is 1 after each
+gateway-plc start and is multiplied by 0.9 per refresh down to 0 (0 by
+~09:00 after the 01:00 restart), like a smoothing weight; but the figure
+still moves after it reaches 0. NEP's binary is closed source: not fixed
+there; NEP's web pages still show it.
+- nep-mqtt: power per inverter = lifetime counter rise between counter
+  changes (the first sample is only a start point: needs two real
+  changes, or a window: then from the first sample, for slow counters
+  such as 1 Wh per 6-9 min near sunset), start point = the last change at least power_window (600 s)
+  old; no change for STALE 300 s -> measured up to now; none for a window
+  -> 0. System power = sum of the inverters' (offline ones count 0):
+  the system's own lifetime counter refills inverter by inverter after a
+  gateway-plc restart (seen: +210 Wh in a minute -> 5.8 kW). AC current =
+  power / AC voltage. Peak today = max of these since midnight or start.
+  NEP's figure: diagnostic sensor reported_power ("Power (inverter
+  reading)"). Tested with synthetic counters (steady, 3-min steps at three
+  offsets, 6.7/10/15/30 W, stop, night, counter glitch) and live on .239
+  (15:49-16:02: system counter +66 Wh in 12.6 min = ~314 W while the
+  freshly restarted reported figure said 485-550 W; per inverter ~10 W vs
+  ~22 W reported; no GridBOSS reading for that window).
+- After gateway-plc restarts, the per-inverter counters lag for a while
+  and then catch up the gap in steps (system 11.482 -> 11.76 kWh in three
+  minutes): averaged over the window that's the right energy.
+
 ### Configure page (2026-11-15)
 
 The user's request: the Wi-Fi page also configures Home Assistant; menu

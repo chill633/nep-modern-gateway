@@ -996,13 +996,40 @@ every 60 seconds (`interval` in the settings file). The topics are
 `nep/<gateway serial>/system`, `nep/<gateway serial>/inverter/<n>` and
 `nep/<gateway serial>/bridge/status`.
 
+**Power comes from the energy counters.** The power figure NEP's gateway
+program reports for each inverter (and the AC current, which matches it)
+can't be trusted: on 15 November 2026 it showed 3.7 kW while the
+inverters' energy counters and the EG4 GridBOSS's meter on the AC-couple
+port both showed about 0.6 kW, and the counters' day total was within 2 %
+of the GridBOSS's. The error builds up while NEP's program runs (after a
+restart its figure was plausible again) and changes through the day; the
+cause is inside that closed-source program. So `nep-mqtt` works out each
+inverter's power from how much its energy counter rose, measured between
+the moments the counter changed, over about the last 10 minutes
+(`power_window`, in seconds), and the system's power as the sum of the
+inverters'. The AC current is that power divided by the AC voltage. NEP's
+own figure stays available as the diagnostic sensor **Power (inverter
+reading)**. What this means in practice:
+
+* Power follows changes about 5 minutes late; the gateway only refreshes
+  each inverter every 2 to 4 minutes, and the counters count whole
+  watt-hours.
+* After `nep-mqtt` starts, power stays unknown until each inverter's counter
+  has changed twice, at most one window (a few minutes in good light; an
+  inverter that isn't reporting counts as 0 W in the system's sum).
+* Power reads 0 W once a counter hasn't changed for a whole window: below
+  about 6 W per inverter input, and at night.
+* **Peak power today** is the highest of these values since midnight, or
+  since `nep-mqtt` started if that was later.
+* NEP's web pages still show NEP's own figure.
+
 * An inverter the gateway has no current data for (at night, or a module
   that isn't connected yet) shows as not reporting, with 0 W; its lifetime
   energy stays.
 * The lifetime energy never goes down: a lower value or 0 while NEP's
   programs restart is ignored, so Home Assistant doesn't see a meter reset.
 * NEP's field names are swapped: `today` is the lifetime energy and `total`
-  is today's, both in Wh. Power and peak are in mW, the AC voltage in
+  is today's, both in Wh. Its power and peak are in mW, the AC voltage in
   0.1 V, the DC voltage, current and frequency in hundredths.
 * The temperature is taken as 0.1 °C, which hasn't been checked against
   another reading. If it looks wrong next to the gateway's display, set
