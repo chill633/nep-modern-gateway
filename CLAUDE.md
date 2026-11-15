@@ -992,9 +992,14 @@ in ~/Working:
   (NEP's boot script), views/*.php and realdata.php carry zlg-chroot's
   time edits, static/local/ (live status files) left out. NEP-BUNDLE.txt
   inside says so. A pristine copy needs the NAND (sudo).
-- m6g2c-trixie/, the build tree and the built images, and
-  zlg-migrate.tar.gz: rebuild with ./build.sh (README sections 1 and 2;
-  local.env with the Wi-Fi settings is back in the checkout, git-ignored).
+- m6g2c-trixie/, the build tree and the built images: rebuild with
+  ./build.sh (README sections 1 and 2; local.env with the Wi-Fi settings is
+  back in the checkout, git-ignored).
+- zlg-migrate.tar.gz: **rebuilt 2026-11-15** in ~/Working from d666180
+  (Configure page included): fetch-deps.sh (deps/ identical to the
+  board's), zlg-time.so built with Ubuntu's gcc-arm-linux-gnueabihf 15.3
+  (now installed here; same six exports as the board's 2026-11-06 build,
+  no NEEDED entries, bytes differ by compiler).
 - The session scratch folders and anything else outside the repository.
 Where other sections say these files exist, this section wins. A backup
 snapshot of an early version of this kit (m6g2c-buster, 2026-11-04) was
