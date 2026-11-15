@@ -925,6 +925,63 @@ checks every request itself; the pages reach it over a socket
     the voltage trips about 17 times too low and the power limit doubled.
     On other firmware versions the Advanced page says it isn't available.
 
+### 7b. Home Assistant over MQTT
+
+`board-files/zlg/ha-mqtt/` (on the board: `/usr/local/share/zlg/ha-mqtt/`)
+sends the gateway's solar data to Home Assistant through its MQTT broker.
+It is optional and works in local-only mode: `nep-mqtt` reads the JSON
+pages of the gateway's own web interface (section 7a),
+`http://127.0.0.1/nep/realdata/mod/N` (N=0 is the whole system, N>=1 an
+inverter), and publishes them with Home Assistant MQTT discovery. Nothing
+goes anywhere but the broker you set.
+
+NEP's own MQTT programs (`gateway-mqtt-nep-US` and `-EU`, chosen by
+`MQTT_EU` in `engineer.cfg`) aren't used for this. They are NEP's link to
+its cloud, not a general MQTT output, and stay off in local-only mode.
+
+**Install**, with the web interface on port 80:
+
+1. In Home Assistant, create a user for the gateway (Settings > People >
+   Users). The Mosquitto broker accepts Home Assistant users as MQTT
+   logins.
+2. On the board:
+   ```sh
+   sudo sh /usr/local/share/zlg/ha-mqtt/install.sh
+   sudo nano /etc/nep-mqtt.conf           # the broker's host, user and password
+   sudo systemctl enable --now nep-mqtt
+   ```
+   The script installs Debian's `python3-paho-mqtt`, `/usr/local/bin/nep-mqtt`,
+   `nep-mqtt.service` and, the first time, `/etc/nep-mqtt.conf` (mode 600).
+   Run it again after an update of the kit; it keeps your settings.
+
+The service runs as a throwaway unprivileged user and receives the settings
+file as a systemd credential. `journalctl -u nep-mqtt` shows its log
+("connected to ...", then "publishing 24 inverters every 60 s").
+
+**In Home Assistant** the gateway appears as one device (power, peak power
+today, energy today, lifetime energy, AC voltage, frequency, inverters
+online) and every inverter in `plc_id.conf` as its own device (the same,
+plus DC voltage, AC current, temperature and a "Reporting" status). The
+energy sensors can be added to the Energy dashboard. Readings are published
+every 60 seconds (`interval` in the settings file). The topics are
+`nep/<gateway serial>/system`, `nep/<gateway serial>/inverter/<n>` and
+`nep/<gateway serial>/bridge/status`.
+
+* An inverter the gateway has no current data for (at night, or a module
+  that isn't connected yet) shows as not reporting, with 0 W; its lifetime
+  energy stays.
+* The lifetime energy never goes down: a lower value or 0 while NEP's
+  programs restart is ignored, so Home Assistant doesn't see a meter reset.
+* NEP's field names are swapped: `today` is the lifetime energy and `total`
+  is today's, both in Wh. Power and peak are in mW, the AC voltage in
+  0.1 V, the DC voltage, current and frequency in hundredths.
+* The temperature is taken as 0.1 °C, which hasn't been checked against
+  another reading. If it looks wrong next to the gateway's display, set
+  `temperature_divisor`.
+* If the web interface is on another port, set `url` in the settings file.
+* `nep-mqtt --dry-run` prints the discovery messages and one set of
+  readings without connecting; it needs no settings file.
+
 ## 8. Layout
 
 ```
@@ -939,6 +996,7 @@ board-files/linux/          kernel DTS, config fragment, drivers/ (MI200E PLC dr
 board-files/rootfs/         first-boot resize/SSH-key service
 board-files/zlg/            runs ZLG's gateway software in /srv/zlg (section 7)
 board-files/zlg/web/        NEP's web interface on lighttpd + PHP 8.4 (section 7a)
+board-files/zlg/ha-mqtt/    solar data to Home Assistant by MQTT (section 7b)
 tools/                      factory hardware dump, pinctrl decoder, DCD/DDR decoder,
                             watchdog-GPIO finder
 ```
@@ -982,6 +1040,11 @@ trixie image:**
     through `zlg-admin`, with replies identical to `plc_set`'s; the
     readings resume on **Leave Setup Mode**. Writing hasn't been switched
     on or tried.
+* Home Assistant over MQTT (section 7b), on 15 November 2026: `nep-mqtt`
+  installed and running as a service, connected to Home Assistant's
+  Mosquitto broker; the gateway and all 24 inverter modules appeared in
+  Home Assistant by discovery, and the energy sensors in its Energy
+  dashboard. The inverter temperature's scale hasn't been checked.
 
 The rest of this section is the 20210303 gateway's test record, which
 covers the shared parts (U-Boot, kernel, hardware).

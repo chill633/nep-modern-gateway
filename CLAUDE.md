@@ -274,7 +274,8 @@ The user edits the README's wording; keep their decisions:
   Booster" (CF-WR302S, plug-in repeater with Ethernet) is mentioned but not
   recommended (the user: poor solution, another AP on the home network).
 - Sections run in order: 5a Wi-Fi, 5b Display, 5c MI200E, 6, 7 NEP software
-  with its one subsection 7a web interface (it was briefly 7b; subsections
+  with its subsections 7a web interface and 7b Home Assistant over MQTT
+  (since 2026-11-15; subsections
   are lettered from a, as 4a under 4), 8 Layout, 9 What has been tested.
   Script comments and zlg-chroot's error message say "README section 7";
   03-rootfs.sh's comment says "7a". The board's installed copies are
@@ -896,6 +897,49 @@ tested on the New unit (.239); README 7a "Settings pages" documents them.
 - Browser checks: headless Firefox via /snap/bin/geckodriver and a small
   WebDriver client (urllib), screenshots; sshpass is installed on the
   workstation.
+
+## Home Assistant over MQTT: nep-mqtt (2026-11-15)
+
+board-files/zlg/ha-mqtt/ (README 7b): nep-mqtt (Python 3, paho-mqtt 2.x),
+nep-mqtt.service (DynamicUser, settings via LoadCredential), nep-mqtt.conf
+(-> /etc/nep-mqtt.conf, 600), install.sh. Optional; not enabled by the
+image or by zlg/install.sh.
+- The user asked whether NEP's gateway-mqtt-nep-US/-EU could be pointed at
+  Home Assistant. Answer: no, don't. /root/Gateway/mqtt is root-only and
+  wasn't inspected; from ZLG's boot script they are two builds of one
+  client (MQTT_EU in engineer.cfg picks the link), libpaho-mqtt3as + cJSON,
+  NEP's cloud link. nep-mqtt reads the web interface instead.
+- Source: /nep/realdata/mod/N (realdata.php reads gateway-plc's shared
+  memory, keys 1234 and 4321). N=0 system, 1-24 modules. Units, checked
+  against live values (P = V x I, static/local/N_status): "today" =
+  lifetime Wh, "total" = today's Wh (swapped), power/peak mW, AC_voltage
+  0.1 V, DC_voltage 0.01 V, AC_current 0.01 A, AC_frequency 0.01 Hz.
+  Temperature /10 as deg C is a guess (about 12 with 9 outside, pairs of a
+  dual inverter equal); temperature_divisor changes it. status 0x8000
+  (module=1000) = no current data; mod 0 always has it. "time" is the
+  shifted clock (zlg-time), not used.
+- A poll of 25 pages takes about 4 s wall on the board; interval 60 s.
+- Running on the New unit (.239) since 2026-11-15, installed from the same
+  files: broker = Home Assistant's Mosquitto add-on at
+  homeassistant.home.arpa (192.168.1.198:1883), an HA user for the gateway
+  (credentials only in /etc/nep-mqtt.conf on the board). Entities and the
+  Energy dashboard confirmed by the user. The board's installed copy came
+  from ~/nep-ha-mqtt there, not /usr/local/share/zlg/ha-mqtt (the card's
+  image predates it).
+- Modules 23 and 24 are unplugged on purpose (future expansion): "not
+  reporting" there is expected.
+- Topics and unique IDs contain the gateway serial (read from
+  /root/Gateway/sn at run time); keep examples in docs as <gateway serial>.
+
+## Workstation rebuilt after a disk failure (2026-11-14)
+
+The user's disk failed; ~/Working was restored from a backup and this
+checkout is a fresh clone (2026-11-15). Until checked otherwise: gh isn't
+installed; SSH to .239 is by key (debian), sudo there still needs the
+password, so the user runs root steps. The local-only files listed under
+"Repository and access" and the security report weren't in ~/Working on
+2026-11-15: ask the user before assuming they exist. The backup's
+m6g2c-buster/ is an early snapshot of this kit (2026-11-04), superseded.
 
 ## Vendor security report (2026-11-06)
 

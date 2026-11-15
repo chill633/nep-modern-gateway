@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""Publish the NEP BDG-256 gateway's live solar data to Home Assistant by MQTT.
+
+Reads the gateway's own local JSON pages (/nep/realdata/mod/N: N=0 is the
+whole system, N>=1 an inverter) and publishes them with Home Assistant MQTT
+discovery, so the gateway and every inverter appear in HA as devices.
+Nothing is sent anywhere but the configured broker.
+
+    nep-mqtt --config /etc/nep-mqtt.conf
+    nep-mqtt --config nep-mqtt.conf --dry-run     # print, don't connect
+
+Needs python3-paho-mqtt 2.x (not for --dry-run). README section 7b.
+"""
+import argparse
+import configparser
+import json
+import logging
+import re
+import signal
+import sys
+import threading
+import urllib.request
+
+log = logging.getLogger("nep-mqtt")
+
+DEFAULTS = {
+    "mqtt": {
+        "host": "homeassistant.home.arpa",
+        "port": "1883",
+        "username": "",
+        "password": "",
+        "base_topic": "nep",
+        "discovery_prefix": "homeassistant",
+    },
+    "gateway": {
+        "url": "http://127.0.0.1/nep/realdata/mod/{n}",
+        "interval": "60",
+        "sn_file": "/srv/zlg/root/Gateway/sn",
+        "plc_id_file": "/srv/zlg/root/Gateway/plc_id.conf",
+        # overrides plc_id_file, e.g. "1-24" or "1,2,5-8"
+        "modules": "",
+        # overrides sn_file
+        "serial": "",
+        # raw Temperature / this = degrees C
+        "temperature_divisor": "10",
+    },
+}
+
+OFFLINE = 0x8000  # status bit: the gateway has no current data for the inverter
+
+# key, name, unit, device_class, state_class, display precision
+SYSTEM_SENSORS = [
+    ("power", "Power", "W", "power", "measurement", 0),
+    ("peak_power", "Peak power today", "W", "power", "measurement", 0),
+    ("energy_today", "Energy today", "kWh", "energy", "total_increasing", 2),
+    ("energy_total", "Energy total", "kWh", "energy", "total_increasing", 1),
+    ("ac_voltage", "AC voltage", "V", "voltage", "measurement", 1),
+    ("frequency", "Frequency", "Hz", "frequency", "measurement", 2),
+    ("inverters_online", "Inverters online", None, None, "measurement", 0),
+]
+INVERTER_SENSORS = [
+    ("power", "Power", "W", "power", "measurement", 0),
+    ("peak_power", "Peak power today", "W", "power", "measurement", 0),
+    ("energy_today", "Energy today", "kWh", "energy", "total_increasing", 3),
+    ("energy_total", "Energy total", "kWh", "energy", "total_increasing", 1),
+    ("dc_voltage", "DC voltage", "V", "voltage", "measurement", 2),
+    ("ac_voltage", "AC voltage", "V", "voltage", "measurement", 1),
+    ("ac_current", "AC current", "A", "current", "measurement", 2),
+    ("frequency", "Frequency", "Hz", "frequency", "measurement", 2),
+    ("temperature", "Temperature", "°C", "temperature", "measurement", 1),
+]
+
+
+def load_config(path):
+    cfg = configparser.ConfigParser(interpolation=None)
+    cfg.read_dict(DEFAULTS)
+    if path:
+        with open(path, encoding="utf-8") as f:
+            cfg.read_file(f)
+    return cfg
+
+
+def parse_ranges(text):
+    out = set()
+    for part in re.split(r"[,\s]+", text.strip()):
+        if not part:
+            continue
+        a, _, b = part.partition("-")
+        out.update(range(int(a), int(b or a) + 1))
+    return sorted(n for n in out if 1 <= n <= 256)
+
+
+def read_modules(gw):
+    """{module number: inverter id (hex string, may be '')}"""
+    if gw["modules"].strip():
+        return {n: "" for n in parse_ranges(gw["modules"])}
+    mods = {}
+    with open(gw["plc_id_file"], encoding="ascii", errors="replace") as f:
+        for line in f:
+            m = re.match(r"\s*Inverter(\d+)\s*=\s*0x([0-9A-Fa-f]+)\s*$", line)
+            if m and int(m.group(1)) >= 1:
+                mods[int(m.group(1))] = m.group(2).upper()
+    return dict(sorted(mods.items()))
+
+
+def read_serial(gw):
+    if gw["serial"].strip():
+        return gw["serial"].strip()
+    try:
+        with open(gw["sn_file"], encoding="ascii", errors="replace") as f:
+            m = re.search(r"^\s*SN\s*=\s*([0-9A-Za-z]+)", f.read(), re.M)
+            if m:
+                return m.group(1)
+    except OSError as e:
+        log.warning("no serial number (%s); using 'gateway'", e)
+    return "gateway"
+
+
+def fetch(url, n):
+    with urllib.request.urlopen(url.format(n=n), timeout=10) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+class Bridge:
+    def __init__(self, cfg):
+        self.gw = cfg["gateway"]
+        self.mq = cfg["mqtt"]
+        self.serial = read_serial(self.gw)
+        self.modules = read_modules(self.gw)
+        self.base = "%s/%s" % (self.mq["base_topic"].strip("/"), self.serial)
+        self.avail = self.base + "/bridge/status"
+        self.tdiv = float(self.gw["temperature_divisor"]) or 1.0
+        self.last_total = {}  # module -> last good lifetime energy (Wh)
+
+    # ---- topics and discovery -------------------------------------------
+    def state_topic(self, n):
+        return self.base + ("/system" if n == 0 else "/inverter/%d" % n)
+
+    def device(self, n):
+        gw_id = "nep_%s" % self.serial
+        if n == 0:
+            return {"identifiers": [gw_id], "name": "NEP gateway %s" % self.serial[-5:],
+                    "manufacturer": "NEP", "model": "BDG-256",
+                    "serial_number": self.serial}
+        dev = {"identifiers": ["%s_inv%d" % (gw_id, n)],
+               "name": "NEP inverter %02d" % n,
+               "manufacturer": "NEP", "model": "Microinverter",
+               "via_device": gw_id}
+        if self.modules[n]:
+            dev["serial_number"] = self.modules[n]
+        return dev
+
+    def discovery(self):
+        """[(topic, payload dict)] for every entity"""
+        prefix = self.mq["discovery_prefix"].strip("/")
+        out = []
+        for n in [0] + list(self.modules):
+            uid_base = "nep_%s_%s" % (self.serial, "system" if n == 0 else "inv%d" % n)
+            for key, name, unit, dclass, sclass, prec in (
+                    SYSTEM_SENSORS if n == 0 else INVERTER_SENSORS):
+                p = {"name": name, "unique_id": "%s_%s" % (uid_base, key),
+                     "state_topic": self.state_topic(n),
+                     "value_template": "{{ value_json.%s }}" % key,
+                     "availability_topic": self.avail,
+                     "state_class": sclass,
+                     "suggested_display_precision": prec,
+                     "device": self.device(n)}
+                if unit:
+                    p["unit_of_measurement"] = unit
+                if dclass:
+                    p["device_class"] = dclass
+                out.append(("%s/sensor/%s_%s/config" % (prefix, uid_base, key), p))
+            if n:
+                out.append(("%s/binary_sensor/%s_online/config" % (prefix, uid_base), {
+                    "name": "Reporting", "unique_id": uid_base + "_online",
+                    "state_topic": self.state_topic(n),
+                    "value_template": "{{ 'ON' if value_json.online else 'OFF' }}",
+                    "availability_topic": self.avail,
+                    "device_class": "connectivity",
+                    "entity_category": "diagnostic",
+                    "device": self.device(n)}))
+        return out
+
+    # ---- data -----------------------------------------------------------
+    def total_kwh(self, n, wh):
+        """Lifetime energy never goes down: a 0 or a lower value (gateway
+        software restarting) would look like a meter reset to HA."""
+        last = self.last_total.get(n)
+        if wh > 0 and (last is None or wh >= last):
+            self.last_total[n] = last = wh
+        return None if last is None else round(last / 1000.0, 3)
+
+    def convert(self, n, d):
+        # NEP's field names are swapped: "today" is the lifetime energy and
+        # "total" is today's, both in Wh. Power and peak are in mW.
+        s = {"power": round(d["power"] / 1000.0, 1),
+             "peak_power": round(d["peak"] / 1000.0, 1),
+             "energy_today": round(d["total"] / 1000.0, 3),
+             "energy_total": self.total_kwh(n, d["today"])}
+        if n == 0:
+            s["ac_voltage"] = round(d["AC_voltage"] / 10.0, 1) or None
+            s["frequency"] = round(d["AC_frequency"] / 100.0, 2) or None
+            return s
+        online = not d["status"] & OFFLINE
+        s["online"] = online
+        s["status"] = d["status"]
+        s["firmware"] = "%04X" % d["MI_Version"] if d["MI_Version"] else None
+        if online:
+            s.update(dc_voltage=round(d["DC_voltage"] / 100.0, 2),
+                     ac_voltage=round(d["AC_voltage"] / 10.0, 1),
+                     ac_current=round(d["AC_current"] / 100.0, 2),
+                     frequency=round(d["AC_frequency"] / 100.0, 2),
+                     temperature=round(d["Temperature"] / self.tdiv, 1))
+        else:
+            s.update(dc_voltage=None, ac_voltage=None, ac_current=None,
+                     frequency=None, temperature=None)
+        return s
+
+    def poll(self):
+        """[(topic, state dict)]; raises if the gateway can't be read"""
+        out = []
+        online = 0
+        system = self.convert(0, fetch(self.gw["url"], 0))
+        for n in self.modules:
+            s = self.convert(n, fetch(self.gw["url"], n))
+            online += s["online"]
+            out.append((self.state_topic(n), s))
+        system["inverters_online"] = online
+        return [(self.state_topic(0), system)] + out
+
+
+def run(bridge, dry_run):
+    interval = max(5.0, float(bridge.gw["interval"]))
+    stop = threading.Event()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *_: stop.set())
+
+    if dry_run:
+        for topic, payload in bridge.discovery():
+            print(topic, json.dumps(payload, ensure_ascii=False))
+        for topic, state in bridge.poll():
+            print(topic, json.dumps(state))
+        return 0
+
+    import paho.mqtt.client as mqtt
+
+    mq = bridge.mq
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                         client_id="nep-mqtt-%s" % bridge.serial)
+    if mq["username"]:
+        client.username_pw_set(mq["username"], mq["password"])
+    client.will_set(bridge.avail, "offline", qos=1, retain=True)
+    connected = threading.Event()
+
+    def on_connect(c, userdata, flags, rc, props):
+        if rc.is_failure:
+            log.error("broker refused the connection: %s", rc)
+            return
+        log.info("connected to %s:%s", mq["host"], mq["port"])
+        for topic, payload in bridge.discovery():
+            c.publish(topic, json.dumps(payload, ensure_ascii=False), qos=1, retain=True)
+        connected.set()
+
+    def on_disconnect(c, userdata, flags, rc, props):
+        connected.clear()
+        log.warning("disconnected from the broker: %s", rc)
+
+    client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
+    client.reconnect_delay_set(5, 120)
+    client.connect_async(mq["host"], int(mq["port"]), keepalive=60)
+    client.loop_start()
+
+    healthy = None
+    while not stop.is_set():
+        if connected.is_set():
+            try:
+                states = bridge.poll()
+            except Exception as e:  # gateway web interface down or restarting
+                if healthy is not False:
+                    log.warning("can't read the gateway: %s", e)
+                    client.publish(bridge.avail, "offline", qos=1, retain=True)
+                healthy = False
+            else:
+                if healthy is not True:
+                    log.info("publishing %d inverters every %g s", len(bridge.modules), interval)
+                    client.publish(bridge.avail, "online", qos=1, retain=True)
+                healthy = True
+                for topic, state in states:
+                    client.publish(topic, json.dumps(state))
+        else:
+            healthy = None
+        stop.wait(interval)
+
+    client.publish(bridge.avail, "offline", qos=1, retain=True).wait_for_publish(5)
+    client.disconnect()
+    client.loop_stop()
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--config", help="settings file (/etc/nep-mqtt.conf)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print the discovery and one set of readings; don't connect")
+    args = ap.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    bridge = Bridge(load_config(args.config))
+    if not bridge.modules:
+        log.error("no inverters found (plc_id_file / modules)")
+        return 1
+    return run(bridge, args.dry_run)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

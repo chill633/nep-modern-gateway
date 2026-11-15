@@ -1,0 +1,20 @@
+[Unit]
+Description=NEP gateway: solar data to Home Assistant by MQTT (nep-mqtt, README 7b)
+Wants=network-online.target
+After=network-online.target zlg-web.service
+
+[Service]
+# Runs as a throwaway unprivileged user. The settings file stays root-only
+# and is handed over as a credential (%d = the credentials directory).
+DynamicUser=yes
+LoadCredential=conf:/etc/nep-mqtt.conf
+ExecStart=/usr/local/bin/nep-mqtt --config %d/conf
+Restart=always
+RestartSec=15
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
