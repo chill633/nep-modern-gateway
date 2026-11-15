@@ -947,8 +947,13 @@ in ~/Working:
   note of the user's for it, survived; it stays local.
 - nep-modern-gateway-backup-20261107.git, the pre-rewrite history. Gone for
   good, which doesn't matter for the work.
-- zlg-nep.tar.gz, NEP's web bundle from the Old unit (was the only copy);
-  the Old unit's /srv/zlg or NAND is the source for a new one.
+- zlg-nep.tar.gz, NEP's web bundle from the Old unit. **Rebuilt
+  2026-11-15** in ~/Working from the New unit's /srv/zlg/root/Gateway/nep
+  (firmware 20230903.23; the Old unit at .183 was offline): 382 files,
+  checksums matched the board. Not pristine: index.php is index.php.bak
+  (NEP's boot script), views/*.php and realdata.php carry zlg-chroot's
+  time edits, static/local/ (live status files) left out. NEP-BUNDLE.txt
+  inside says so. A pristine copy needs the NAND (sudo).
 - m6g2c-trixie/, the build tree and the built images, and
   zlg-migrate.tar.gz: rebuild with ./build.sh (README sections 1 and 2;
   local.env with the Wi-Fi settings is back in the checkout, git-ignored).
