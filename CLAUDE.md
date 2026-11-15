@@ -974,6 +974,8 @@ there; NEP's web pages still show it.
   after the 15:34 gateway-plc restart (they lagged, then step up), so
   counter-based power reads high for a while after a restart. The
   morning check (no restart since 01:00 except at night) is the real test.
+  The GridBOSS updates every 4 minutes (the user): expect a small
+  discrepancy at any single moment; compare over several readings.
 - After gateway-plc restarts, the per-inverter counters lag for a while
   and then catch up the gap in steps (system 11.482 -> 11.76 kWh in three
   minutes): averaged over the window that's the right energy.
