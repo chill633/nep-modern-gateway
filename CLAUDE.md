@@ -1061,7 +1061,9 @@ in ~/Working:
   (67 KB: new linker padding, same exports), wpa conf 600 with a derived
   psk and no plain passphrase. **Written to a card by the user and booted
   on the non-production gateway (the reserve); the user is satisfied with
-  it.** That card's gateway setup (README 7/7a) isn't recorded as done.
+  it.** The user's decision: that card stays as it is, without the
+  gateway setup (README 7/7a), as a test system and emergency spare; it
+  won't go into production. Don't propose setting it up unless asked.
 - zlg-migrate.tar.gz: **rebuilt 2026-11-15** in ~/Working from d666180
   (Configure page included): fetch-deps.sh (deps/ identical to the
   board's), zlg-time.so built with Ubuntu's gcc-arm-linux-gnueabihf 15.3
