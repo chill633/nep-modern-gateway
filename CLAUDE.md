@@ -962,6 +962,12 @@ there; NEP's web pages still show it.
   (15:49-16:02: system counter +66 Wh in 12.6 min = ~314 W while the
   freshly restarted reported figure said 485-550 W; per inverter ~10 W vs
   ~22 W reported; no GridBOSS reading for that window).
+- Installed on .239 at 16:05 (the user ran ha-mqtt/install.sh). At ~16:10
+  the GridBOSS read 0 W (dusk) while NEP's figure still said ~460 W.
+  **Open: compare at the same moment, in good light (mid-morning, early
+  afternoon), the GridBOSS AC-couple port, HA's gateway Power and its
+  "Power (inverter reading)"**; the first two should agree within a few %
+  (about 5 min apart). The user asked to continue this in the morning.
 - After gateway-plc restarts, the per-inverter counters lag for a while
   and then catch up the gap in steps (system 11.482 -> 11.76 kWh in three
   minutes): averaged over the window that's the right energy.
