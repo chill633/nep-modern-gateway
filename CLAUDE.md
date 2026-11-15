@@ -992,9 +992,18 @@ in ~/Working:
   (NEP's boot script), views/*.php and realdata.php carry zlg-chroot's
   time edits, static/local/ (live status files) left out. NEP-BUNDLE.txt
   inside says so. A pristine copy needs the NAND (sudo).
-- m6g2c-trixie/, the build tree and the built images: rebuild with
-  ./build.sh (README sections 1 and 2; local.env with the Wi-Fi settings is
-  back in the checkout, git-ignored).
+- m6g2c-trixie/, the build tree: **recreated 2026-11-15** from c320ef7
+  (git archive + local.env + web deps). The workstation is now Ubuntu
+  26.10 (gcc 15.3, OpenSSL 4.0.3); the user installed README 1's packages
+  (qemu-user + qemu-user-binfmt). U-Boot 2024.01's host tools didn't link
+  on OpenSSL 4 (no ENGINE API; OPENSSL_NO_ENGINE is defined):
+  CONFIG_TOOLS_LIBCRYPTO=n doesn't help (kwbimage and image-host still
+  need libcrypto in 2024.01), so 01-uboot.sh now inserts ENGINE_* stand-in
+  macros into lib/rsa/rsa-sign.c under #ifdef OPENSSL_NO_ENGINE. uboot and
+  kernel stages built by Claude (SPL 31744 bytes; 6.12.115-m6g2c-dirty,
+  196 fragment settings, ath9k_htc + rtl8xxxu); Linux 6.12's tools needed
+  no fix. rootfs + image (sudo) are the user's. local.env: NTP_SERVERS
+  added; WIFI_SSID / WIFI_PASSPHRASE were empty in the restored copy.
 - zlg-migrate.tar.gz: **rebuilt 2026-11-15** in ~/Working from d666180
   (Configure page included): fetch-deps.sh (deps/ identical to the
   board's), zlg-time.so built with Ubuntu's gcc-arm-linux-gnueabihf 15.3

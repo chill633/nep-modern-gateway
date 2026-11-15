@@ -100,6 +100,12 @@ of `qemu-user-static` (the two kinds can't be installed together):
 sudo apt install qemu-user qemu-user-binfmt
 ```
 
+**OpenSSL 4** (Ubuntu 26.10 and later) no longer has the ENGINE interface
+that U-Boot 2024.01's `mkimage` calls for signing with key engines. The
+U-Boot stage detects this (`OPENSSL_NO_ENGINE`) and makes those calls
+report "not available"; the board signs nothing, and the SPL and U-Boot
+on the card are unchanged.
+
 `lzop` is needed because the kernel is LZO-compressed (it decompresses
 fastest, which matters with the external watchdog); it isn't installed by
 default on Ubuntu.

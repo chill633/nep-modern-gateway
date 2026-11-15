@@ -51,6 +51,35 @@ if ! grep -q 'imx6ul-zlg-m6g2c.dtb' "$DTS_MAKEFILE"; then
 		die "could not patch $DTS_MAKEFILE"
 fi
 
+# Host tools (mkimage) on OpenSSL 4 (Ubuntu 26.10 and later): it has no
+# ENGINE API (OPENSSL_NO_ENGINE), which 2024.01's rsa-sign.c calls without
+# checking, so mkimage doesn't link. Stand-ins make signing with an engine
+# report "not available"; this board signs nothing, and the SPL and U-Boot
+# themselves are unchanged. No effect with OpenSSL 3, which has the API.
+RSA_SIGN="$SRC/lib/rsa/rsa-sign.c"
+if ! grep -q 'm6g2c: OpenSSL without ENGINE' "$RSA_SIGN"; then
+	awk '{ print }
+	/^#include <openssl\/engine\.h>$/ && !done {
+		print "#ifdef OPENSSL_NO_ENGINE"
+		print "/* m6g2c: OpenSSL without ENGINE (OpenSSL 4): engines are not available */"
+		print "#define ENGINE_get_id(e) ((void)(e), \"none\")"
+		print "#define ENGINE_load_public_key(e, id, ui, cb) ((void)(e), (EVP_PKEY *)NULL)"
+		print "#define ENGINE_load_private_key(e, id, ui, cb) ((void)(e), (EVP_PKEY *)NULL)"
+		print "#define ENGINE_load_builtin_engines() do { } while (0)"
+		print "#define ENGINE_by_id(id) ((ENGINE *)NULL)"
+		print "#define ENGINE_init(e) ((void)(e), 0)"
+		print "#define ENGINE_set_default_RSA(e) ((void)(e), 0)"
+		print "#define ENGINE_ctrl_cmd_string(e, c, a, o) ((void)(e), 0)"
+		print "#define ENGINE_finish(e) ((void)(e), 0)"
+		print "#define ENGINE_free(e) ((void)(e), 0)"
+		print "#endif"
+		done = 1
+	}' "$RSA_SIGN" > "$RSA_SIGN.new"
+	mv "$RSA_SIGN.new" "$RSA_SIGN"
+	grep -q 'm6g2c: OpenSSL without ENGINE' "$RSA_SIGN" ||
+		die "could not patch $RSA_SIGN (U-Boot layout changed? UBOOT_REF=$UBOOT_REF)"
+fi
+
 # DDR calibration overrides -> -D defines picked up by board/zlg/m6g2c/m6g2c.c
 kcflags=""
 for reg in MPWLDECTRL0 MPDGCTRL0 MPRDDLCTL MPWRDLCTL; do
