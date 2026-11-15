@@ -38,7 +38,8 @@
  *    not reachable
  *  - files encrypted with php_screw (controllers/proxy.php) can't run on
  *    PHP 8 and are left out
- *  - this kit's settings pages (app/: Wi-Fi, Modules, Advanced), linked in
+ *  - this kit's settings pages (app/: Configure (Wi-Fi, Home Assistant) at
+ *    /nep/wifi, Modules, Advanced), linked in
  *    the menu after Weather; NEP's own copies (/root/Gateway/wifi, ...)
  *    aren't served. Advanced shows NEP's MI Setup page (misetup, built into
  *    /misetup-ui) with its proxy.cgi and PHP files replaced by the kit's
@@ -198,7 +199,7 @@ function view_edits(string $v): string
 		   pages (app/) */
 		'~(<li><a href="[^"]*info/page/"[^>]*>.*?lang_navi_Layout.*?</a></li>)~'
 			=> '$1' . "\n" . '              <li><a href="<?php echo base_url();?>info/index" title=""><?php echo lang(\'lang_navi_Weather\');?></a></li>' .
-			   "\n" . '              <li><a href="<?php echo base_url();?>wifi" title=""><?php echo lang(\'lang_navi_Wifi\');?></a></li>' .
+			   "\n" . '              <li><a href="<?php echo base_url();?>wifi" title=""><?php echo lang(\'lang_navi_Configure\');?></a></li>' .
 			   "\n" . '              <li><a href="<?php echo base_url();?>modules" title=""><?php echo lang(\'lang_navi_Modules\');?></a></li>' .
 			   "\n" . '              <li><a href="<?php echo base_url();?>advanced" title=""><?php echo lang(\'lang_navi_Advanced\');?></a></li>',
 		/* the Info page's weather labels were English only; NEP's
@@ -390,11 +391,11 @@ foreach (['controllers', 'models', 'libraries'] as $d) {
    which NEP's files don't have; added after related entries, keeping each
    file's line endings */
 $newlang = [
-	'english'  => ['lang_navi_Weather' => 'Weather', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => 'Modules', 'lang_navi_Advanced' => 'Advanced', 'lang_weather_map_today' => 'Today'],
-	'japanese' => ['lang_navi_Weather' => '天気', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => 'モジュール', 'lang_navi_Advanced' => '詳細設定', 'lang_weather_map_today' => '今日'],
-	'chinese'  => ['lang_navi_Weather' => '天气', 'lang_navi_Wifi' => 'Wi-Fi', 'lang_navi_Modules' => '模块', 'lang_navi_Advanced' => '高级设置', 'lang_weather_map_today' => '今天'],
+	'english'  => ['lang_navi_Weather' => 'Weather', 'lang_navi_Configure' => 'Configure', 'lang_navi_Modules' => 'Modules', 'lang_navi_Advanced' => 'Advanced', 'lang_weather_map_today' => 'Today'],
+	'japanese' => ['lang_navi_Weather' => '天気', 'lang_navi_Configure' => '設定', 'lang_navi_Modules' => 'モジュール', 'lang_navi_Advanced' => '詳細設定', 'lang_weather_map_today' => '今日'],
+	'chinese'  => ['lang_navi_Weather' => '天气', 'lang_navi_Configure' => '设置', 'lang_navi_Modules' => '模块', 'lang_navi_Advanced' => '高级设置', 'lang_weather_map_today' => '今天'],
 ];
-$after = ['lang_navi_Weather' => 'lang_navi_Layout', 'lang_navi_Wifi' => 'lang_navi_Weather', 'lang_navi_Modules' => 'lang_navi_Wifi',
+$after = ['lang_navi_Weather' => 'lang_navi_Layout', 'lang_navi_Configure' => 'lang_navi_Weather', 'lang_navi_Modules' => 'lang_navi_Configure',
 	  'lang_navi_Advanced' => 'lang_navi_Modules',
 	  'lang_weather_map_today' => 'lang_weather_map_weatherinfo'];
 foreach ($newlang as $l => $keys) {

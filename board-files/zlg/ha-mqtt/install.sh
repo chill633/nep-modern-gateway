@@ -16,9 +16,9 @@ install -m 644 nep-mqtt.service /etc/systemd/system/nep-mqtt.service
 systemctl daemon-reload
 if [ ! -e /etc/nep-mqtt.conf ]; then
 	install -m 600 nep-mqtt.conf /etc/nep-mqtt.conf
-	echo "Installed. Set the broker's host, user and password:"
-	echo "  sudo nano /etc/nep-mqtt.conf"
-	echo "then:  sudo systemctl enable --now nep-mqtt"
+	echo "Installed. Set it up on the web interface's Configure page"
+	echo "(Home Assistant), or edit /etc/nep-mqtt.conf and run"
+	echo "  sudo systemctl enable --now nep-mqtt"
 	exit 0
 fi
 systemctl enable nep-mqtt

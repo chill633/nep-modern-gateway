@@ -1,6 +1,6 @@
 <?php defined('BASEPATH') OR exit('No direct script access allowed'); ?>
 <style>
-/* the kit's settings pages (Wi-Fi, Modules, Advanced) */
+/* the kit's settings pages (Configure, Modules, Advanced) */
 .zlg-main { background: #fff; overflow: hidden; padding-bottom: 10px; }
 .zlg-page { padding: 15px 20px; font-size: 13px; line-height: 1.5; color: #333; }
 .zlg-page h2 { font-size: 17px; margin: 18px 0 8px; color: #3C633C; }
@@ -29,4 +29,8 @@
 .zlg-list tr.pick { cursor: pointer; }
 .zlg-list tr.pick:hover { background: #e4ece4; }
 .zlg-muted { color: #888; }
+.zlg-form input[type=checkbox] { vertical-align: -2px; margin: 0 6px 0 0; }
+.zlg-form input.short { width: 70px; }
+.zlg-steps { margin: 6px 0 0; padding-left: 20px; }
+.zlg-steps li { margin: 5px 0; }
 </style>

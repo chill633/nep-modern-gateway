@@ -19,6 +19,7 @@ import re
 import signal
 import sys
 import threading
+import urllib.parse
 import urllib.request
 
 log = logging.getLogger("nep-mqtt")
@@ -114,6 +115,16 @@ def read_serial(gw):
     except OSError as e:
         log.warning("no serial number (%s); using 'gateway'", e)
     return "gateway"
+
+
+def broker_host(value):
+    """host setting: a name or address, or a URL such as
+    http://homeassistant.local (the Configure page stores what was typed);
+    only its host name is used"""
+    value = value.strip()
+    if "://" in value:
+        return urllib.parse.urlsplit(value).hostname or value
+    return value
 
 
 def fetch(url, n):
@@ -256,7 +267,7 @@ def run(bridge, dry_run):
         if rc.is_failure:
             log.error("broker refused the connection: %s", rc)
             return
-        log.info("connected to %s:%s", mq["host"], mq["port"])
+        log.info("connected to %s:%s", host, mq["port"])
         for topic, payload in bridge.discovery():
             c.publish(topic, json.dumps(payload, ensure_ascii=False), qos=1, retain=True)
         connected.set()
@@ -268,7 +279,8 @@ def run(bridge, dry_run):
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
     client.reconnect_delay_set(5, 120)
-    client.connect_async(mq["host"], int(mq["port"]), keepalive=60)
+    host = broker_host(mq["host"])
+    client.connect_async(host, int(mq["port"]), keepalive=60)
     client.loop_start()
 
     healthy = None

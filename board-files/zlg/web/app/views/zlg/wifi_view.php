@@ -40,7 +40,7 @@ $chan = function ($f) {
 <?php endif; ?>
 </div>
 
-<h2>Settings</h2>
+<h2>Wi-Fi settings</h2>
 <?php if (!$logged_in): ?>
 <div class="zlg-box">
   <table class="zlg-kv">
@@ -85,6 +85,87 @@ $chan = function ($f) {
 <div id="progress" class="zlg-msg info" style="display:none"></div>
 
 <?php endif; ?>
+
+<?php
+/* Home Assistant (nep-mqtt, README 7b): defaults until it is set up */
+$ha = is_array($ha ?? null) ? $ha : [];
+$ha_ok = !empty($ha['ok']);
+$ha_set = $ha_ok && !empty($ha['password_set']) && ($ha['url'] ?? '') !== '';
+$ha_url = $ha_set ? $ha['url'] : 'http://homeassistant.local';
+$ha_port = $ha_set && ($ha['port'] ?? '') !== '' ? $ha['port'] : '1883';
+$ha_user = $ha_set && ($ha['username'] ?? '') !== '' ? $ha['username'] : 'nep';
+?>
+<h2 id="ha">Home Assistant</h2>
+<div class="zlg-box">
+<?php if (!$ha_ok): ?>
+  <span class="zlg-muted"><?php echo $h(ucfirst($ha['error'] ?? 'unknown error')); ?>.</span>
+<?php else: ?>
+  <table class="zlg-kv">
+    <tr><th>Status</th><td><?php
+      if (empty($ha['installed']))
+        echo 'Not installed on this gateway. Install it once with <code>sudo sh /usr/local/share/zlg/ha-mqtt/install.sh</code>.';
+      elseif (!$ha_set)
+        echo 'Not set up yet.';
+      elseif (empty($ha['enabled']))
+        echo 'Off.';
+      else
+        echo !empty($ha['active']) ? 'On: the solar data goes to Home Assistant every minute.' : 'On, but the service isn\'t running.';
+    ?></td></tr>
+<?php if ($ha_set): ?>
+    <tr><th>Home Assistant</th><td><?php echo $h($ha['url'] . ', port ' . ($ha['port'] ?: '1883') . ', user ' . $ha['username']); ?></td></tr>
+<?php endif; ?>
+<?php if (!empty($ha['installed']) && ($ha['log'] ?? '') !== ''): ?>
+    <tr><th>Last message</th><td><?php echo $h($ha['log']); ?></td></tr>
+<?php endif; ?>
+  </table>
+<?php endif; ?>
+</div>
+
+<?php if ($ha_ok && !empty($ha['installed'])): ?>
+<?php if (!$logged_in): ?>
+<div class="zlg-box"><p class="zlg-muted" style="margin:0">Log in (top right) to change these settings.</p></div>
+<?php else: ?>
+<div class="zlg-box zlg-form">
+  <form id="haf" onsubmit="return false">
+    <div class="row"><label></label><input type="checkbox" name="enabled" id="ha_on" value="1"<?php echo !$ha_set || !empty($ha['enabled']) ? ' checked' : ''; ?>/>Send the solar data to Home Assistant</div>
+    <div id="ha_rows">
+    <div class="row"><label>Home Assistant URL</label><input type="text" name="url" maxlength="200" value="<?php echo $h($ha_url); ?>"/>
+      <span class="hint">Its address as you open it in the browser, without the port (:8123). Only the name or IP address is used.
+        If the gateway can't find homeassistant.local, enter Home Assistant's IP address (Settings &gt; System &gt; Network).</span></div>
+    <div class="row"><label>Port</label><input type="text" name="port" class="short" maxlength="5" value="<?php echo $h($ha_port); ?>"/>
+      <span class="hint">The Mosquitto broker's MQTT port: 1883 unless you changed it.</span></div>
+    <div class="row"><label>User name</label><input type="text" name="username" maxlength="64" autocomplete="off" value="<?php echo $h($ha_user); ?>"/></div>
+    <div class="row"><label>Password</label><input type="password" name="password" maxlength="128" autocomplete="new-password"/>
+      <span class="hint"><?php echo $ha_set ? 'Leave empty to keep the stored password.' : 'The password of the Home Assistant user above.'; ?></span></div>
+    </div>
+    <div class="row"><label></label><button class="zlg-btn" type="button" id="ha_save">Save</button></div>
+    <p class="zlg-muted" style="margin:10px 0 0">Before saving, the gateway logs in to Home Assistant's broker with these
+      settings; nothing changes if that fails.</p>
+  </form>
+</div>
+<div id="ha_msg" class="zlg-msg" style="display:none"></div>
+<?php endif; ?>
+<?php endif; ?>
+
+<h2>Adding the gateway's user in Home Assistant</h2>
+<div class="zlg-box">
+  The gateway sends its data to Home Assistant's MQTT broker and logs in there as a Home Assistant user.
+  Give it a user of its own, so it never needs your login:
+  <ol class="zlg-steps">
+    <li><b>The broker</b>, once: in Home Assistant, open Settings &gt; Add-ons &gt; Add-on store, install
+      <b>Mosquitto broker</b> and start it. Home Assistant then offers to set up the <b>MQTT</b> integration
+      (Settings &gt; Devices &amp; services): accept it.</li>
+    <li><b>The user</b>: Settings &gt; People &gt; <b>Add person</b>. Name it, for example, "NEP gateway", turn on
+      <b>Allow login</b>, and enter the user name <b>nep</b> (Home Assistant's user names are lower case) and a
+      password of its own. Leave <b>Administrator</b> off: the gateway needs no other rights. Don't use the names
+      "homeassistant" or "addons", which the broker keeps for itself.</li>
+    <li><b>Here</b>: log in (top right), enter the same user name and password with Home Assistant's address, and
+      press Save. Within a minute the gateway and every inverter appear under Settings &gt; Devices &amp; services
+      &gt; MQTT. Their energy sensors can be added to the Energy dashboard (Settings &gt; Dashboards &gt; Energy).</li>
+  </ol>
+  <p class="zlg-muted" style="margin:6px 0 0">The Mosquitto broker accepts Home Assistant's users as MQTT logins,
+    so the broker itself needs no settings. Menu names can differ a little between Home Assistant versions.</p>
+</div>
 </div>
 
 <script type="text/javascript">
@@ -179,6 +260,29 @@ $(function () {
         poll(r.id, Date.now(), r.wait);
       })
       .fail(function () { show("err", "The gateway didn't answer."); b.prop("disabled", false); });
+  });
+
+  /* Home Assistant */
+  function haShow(cls, html) { $("#ha_msg").attr("class", "zlg-msg " + cls).html(html).show(); }
+  function haRows() { $("#ha_rows").toggle($("#ha_on").prop("checked")); }
+  $("#ha_on").on("change", haRows);
+  haRows();
+  $("#ha_save").on("click", function () {
+    var b = $(this).prop("disabled", true);
+    var on = $("#ha_on").prop("checked");
+    haShow("info", on ? "Logging in to Home Assistant's broker ..." : "Turning it off ...");
+    $.ajax({ url: base + "ha_save", method: "POST", data: $("#haf").serialize() + "&csrf=" + encodeURIComponent(csrf),
+             dataType: "json", timeout: 45000 })
+      .done(function (r) {
+        if (!r.ok) { haShow("err", "Not saved: " + esc(r.error) + "."); return; }
+        haShow("ok", (r.enabled ? "Saved: the gateway logged in to " + esc(r.host) + " and now sends its data there. " +
+                                  "The devices appear in Home Assistant within a minute. "
+                                : "Turned off; the settings are kept. ") +
+          '<a href="' + base + '#ha">Reload the page</a>.');
+        $("#haf input[name=password]").val("");
+      })
+      .fail(function () { haShow("err", "The gateway didn't answer."); })
+      .always(function () { b.prop("disabled", false); });
   });
 });
 </script>

@@ -1,6 +1,6 @@
 <?php defined('BASEPATH') OR exit('No direct script access allowed');
 /*
- * Login for the settings pages (Wi-Fi, Modules, Advanced): viewing is open,
+ * Login for the settings pages (Configure, Modules, Advanced): viewing is open,
  * changes need the settings password. Part of this kit, not NEP's code.
  */
 #[\AllowDynamicProperties]

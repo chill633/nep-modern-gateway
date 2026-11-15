@@ -22,7 +22,8 @@ Along the way, two features that had stopped working were restored: the
 **weather**, whose Yahoo service closed in 2019, now comes from Open-Meteo
 for the gateway's location, and the **map** on the Weather page, which
 showed a broken Google Maps image, now shows OpenStreetMap. The gateway's
-settings pages, which NEP served apart from the main pages (**Wi-Fi**, the
+settings pages, which NEP served apart from the main pages (**Wi-Fi**, now
+on a **Configure** page that also sets up the link to Home Assistant, the
 **module** list and the inverters' grid settings, **MI Setup**), are now in
 the web interface's menu, behind a settings password.
 
@@ -394,7 +395,7 @@ gets an address by DHCP. Without the dongle the boot doesn't wait for it.
 
 On the board: `iw dev wlan0 link` shows the association, `ip addr show wlan0`
 the address, and `journalctl -u wpa_supplicant@wlan0` any errors. To change
-networks later, use the web interface's **Wi-Fi** page (section 7a), which
+networks later, use the web interface's **Configure** page (section 7a), which
 puts the previous settings back if the new ones don't connect. By hand: edit
 the config file (`wpa_passphrase "SSID" "pass"` makes the `network={}`
 block), then `sudo systemctl restart wpa_supplicant@wlan0`.
@@ -835,7 +836,8 @@ is done by `zlg-admin`, a helper running as root outside `/srv/zlg`, which
 checks every request itself; the pages reach it over a socket
 (`zlg-admin.socket`, `/run/zlg/admin.sock`).
 
-* **Wi-Fi** (`/nep/wifi`): the connection (network, access point, signal,
+* **Configure** (`/nep/wifi`, NEP's Wi-Fi page's address): Wi-Fi, and
+  the link to Home Assistant (section 7b). Wi-Fi: the connection (network, access point, signal,
   bit rate, address) and its settings: the network name, with a search for
   networks in range; WPA2-Personal, WPA3-Personal or open; an address from
   the router (DHCP) or a fixed one. A change is tested for 90 seconds: if
@@ -941,18 +943,39 @@ its cloud, not a general MQTT output, and stay off in local-only mode.
 
 **Install**, with the web interface on port 80:
 
-1. In Home Assistant, create a user for the gateway (Settings > People >
-   Users). The Mosquitto broker accepts Home Assistant users as MQTT
-   logins.
-2. On the board:
+1. On the board, once:
    ```sh
    sudo sh /usr/local/share/zlg/ha-mqtt/install.sh
-   sudo nano /etc/nep-mqtt.conf           # the broker's host, user and password
-   sudo systemctl enable --now nep-mqtt
    ```
    The script installs Debian's `python3-paho-mqtt`, `/usr/local/bin/nep-mqtt`,
    `nep-mqtt.service` and, the first time, `/etc/nep-mqtt.conf` (mode 600).
    Run it again after an update of the kit; it keeps your settings.
+2. In Home Assistant, install the **Mosquitto broker** add-on and accept
+   the MQTT integration it offers, then add a person for the gateway
+   (Settings > People > Add person, **Allow login** on, user name `nep`,
+   not an administrator). The Mosquitto broker accepts Home Assistant users
+   as MQTT logins. The Configure page shows these steps as well.
+3. On the web interface's **Configure** page, under **Home Assistant**, log
+   in with the settings password and enter Home Assistant's URL, the port
+   and that user's name and password, then **Save**. The fields start as
+   `http://homeassistant.local`, `1883` and `nep`.
+
+Saving first logs in to the broker once (an MQTT CONNECT from `zlg-admin`),
+so a wrong address, port, user name or password is reported and nothing is
+changed. Then it writes the `[mqtt]` values to `/etc/nep-mqtt.conf`
+(comments and the `[gateway]` section stay), enables `nep-mqtt` and
+restarts it. Unticking **Send the solar data to Home Assistant** stops and
+disables the service and keeps the settings. The page shows the service's
+state and its last log line. Only the URL's host name is used; a port in
+the URL is refused (it goes in the Port field), and the broker's plain
+MQTT port is needed: `nep-mqtt` doesn't use TLS.
+
+The gateway doesn't resolve `.local` names: systemd-resolved runs without
+mDNS here. If Home Assistant isn't known as `homeassistant.local` to the
+router's DNS, the page says so: enter Home Assistant's IP address (Settings
+> System > Network in Home Assistant) or a name the router knows. Editing
+`/etc/nep-mqtt.conf` by hand still works (`sudo systemctl restart
+nep-mqtt` afterwards).
 
 The service runs as a throwaway unprivileged user and receives the settings
 file as a systemd credential. `journalctl -u nep-mqtt` shows its log
@@ -1045,6 +1068,10 @@ trixie image:**
   Mosquitto broker; the gateway and all 24 inverter modules appeared in
   Home Assistant by discovery, and the energy sensors in its Energy
   dashboard. The inverter temperature's scale hasn't been checked.
+  The same day, the Configure page's Home Assistant section: shown without
+  a login, changes refused without one, and a save checked the broker
+  login, rewrote the settings and restarted `nep-mqtt`, which reconnected
+  and published again within a minute.
 
 The rest of this section is the 20210303 gateway's test record, which
 covers the shared parts (U-Boot, kernel, hardware).

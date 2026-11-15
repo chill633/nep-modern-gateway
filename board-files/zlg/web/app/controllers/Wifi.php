@@ -1,8 +1,10 @@
 <?php defined('BASEPATH') OR exit('No direct script access allowed');
 /*
- * Wi-Fi settings page (NEP's /wifi, on Debian's wpa_supplicant and
- * systemd-networkd). zlg-admin does the work; a change that doesn't connect
- * within 90 seconds is undone. Part of this kit, not NEP's code.
+ * The Configure page (/nep/wifi, NEP's Wi-Fi page's address; "Configure" in
+ * the menu): Wi-Fi on Debian's wpa_supplicant and systemd-networkd, and the
+ * Home Assistant link (nep-mqtt, README 7b). zlg-admin does the work; a
+ * Wi-Fi change that doesn't connect within 90 seconds is undone. Part of
+ * this kit, not NEP's code.
  */
 #[\AllowDynamicProperties]
 class Wifi extends CI_Controller {
@@ -20,6 +22,7 @@ class Wifi extends CI_Controller {
 		$data = [
 			'page' => 'wifi',
 			'st' => $st,
+			'ha' => $this->zlg_admin->call('ha.get'),
 			'logged_in' => $this->zlg_admin->logged_in(),
 			'csrf' => $this->zlg_admin->csrf(),
 			'msg' => $this->session->flashdata('zlg_msg'),
@@ -64,6 +67,21 @@ class Wifi extends CI_Controller {
 			'gateway' => trim((string)$in->post('gateway')),
 			'dns' => trim((string)$in->post('dns')),
 		]));
+	}
+
+	/* Home Assistant: zlg-admin logs in to the broker before it saves */
+	public function ha_save()
+	{
+		if (!$this->guard())
+			return;
+		$in = $this->input;
+		$this->zlg_admin->json($this->zlg_admin->call('ha.set', [
+			'enabled' => (string)$in->post('enabled') === '1',
+			'url' => trim((string)$in->post('url')),
+			'port' => trim((string)$in->post('port')),
+			'username' => trim((string)$in->post('username')),
+			'password' => (string)$in->post('password'),
+		], 40));
 	}
 
 	/* polled while a change is tested (no login: it shows no secrets) */

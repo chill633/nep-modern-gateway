@@ -2,7 +2,8 @@
 <?php
 /*
  * zlg-admin: the privileged side of the web interface's settings pages
- * (Wi-Fi, Modules, Advanced; the Weather page's source). Runs as root
+ * (Configure: Wi-Fi and Home Assistant; Modules, Advanced; the Weather
+ * page's source). Runs as root
  * outside /srv/zlg; the pages (PHP in zlg-web-fpm, www-data, chrooted)
  * talk to it over a Unix socket:
  *
@@ -1259,6 +1260,210 @@ function op_weather_set(array $req): array
 	return ['source' => $src, 'url' => $set['ZLG_WEATHER_URL'] ?? ($d['ZLG_WEATHER_URL'] ?? '')];
 }
 
+/* ---- Home Assistant: nep-mqtt's broker settings (README 7b) -------------- */
+
+const HA_CONF = '/etc/nep-mqtt.conf';
+const HA_BIN = '/usr/local/bin/nep-mqtt';
+const HA_UNIT = 'nep-mqtt.service';
+const HA_TEMPLATE = '/usr/local/share/zlg/ha-mqtt/nep-mqtt.conf';
+const HA_PLACEHOLDER = 'CHANGE-ME';	/* the template's password */
+
+function ha_installed(): bool
+{
+	return is_executable(HA_BIN) && is_file('/etc/systemd/system/' . HA_UNIT);
+}
+
+/* the [mqtt] section's values (configparser syntax, "key = value") */
+function ha_conf_get(): array
+{
+	$v = [];
+	$sec = '';
+	foreach (preg_split('/\R/', (string)@file_get_contents(HA_CONF)) as $l) {
+		if (preg_match('/^\s*\[(.+?)\]\s*$/', $l, $m))
+			$sec = trim($m[1]);
+		elseif ($sec === 'mqtt' && preg_match('/^\s*([A-Za-z_]+)\s*[=:]\s*(.*?)\s*$/', $l, $m))
+			$v[strtolower($m[1])] ??= $m[2];
+	}
+	return $v;
+}
+
+/* set keys in [mqtt]: an existing line is replaced, a missing key is added
+   at the end of the section; comments and the other sections stay */
+function ha_conf_set(array $set): void
+{
+	$src = is_file(HA_CONF) ? HA_CONF : (is_file(HA_TEMPLATE) ? HA_TEMPLATE : null);
+	$lines = $src ? preg_split('/\R/', rtrim((string)file_get_contents($src), "\n")) : [];
+	$out = [];
+	$sec = '';
+	$seen = [];
+	$found = false;
+	$add_missing = function () use (&$out, &$seen, $set) {
+		$tail = [];
+		while ($out && trim(end($out)) === '')
+			array_unshift($tail, array_pop($out));
+		foreach ($set as $k => $v)
+			if (!isset($seen[$k]))
+				$out[] = "$k = $v";
+		array_push($out, ...($tail ?: ['']));
+	};
+	foreach ($lines as $l) {
+		if (preg_match('/^\s*\[(.+?)\]\s*$/', $l, $m)) {
+			if ($sec === 'mqtt')
+				$add_missing();
+			$sec = trim($m[1]);
+			$found = $found || $sec === 'mqtt';
+		} elseif ($sec === 'mqtt' && preg_match('/^\s*([A-Za-z_]+)\s*[=:]/', $l, $m)
+			  && array_key_exists($k = strtolower($m[1]), $set)) {
+			if (isset($seen[$k]))
+				continue;		/* a duplicate would stop configparser */
+			$seen[$k] = true;
+			$l = "$k = $set[$k]";
+		}
+		$out[] = $l;
+	}
+	if ($sec === 'mqtt')
+		$add_missing();
+	if (!$found) {
+		$head = ['[mqtt]'];
+		foreach ($set as $k => $v)
+			$head[] = "$k = $v";
+		$out = array_merge($head, [''], $out);
+	}
+	put_atomic(HA_CONF, rtrim(implode("\n", $out), "\n") . "\n", 0600);
+}
+
+function ha_unit(string $q): string
+{
+	return trim(run(['/usr/bin/systemctl', $q, HA_UNIT]));
+}
+
+/* nep-mqtt's last log line: "connected to ...", "publishing ...", or why not */
+function ha_last_log(): string
+{
+	$out = run(['/usr/bin/journalctl', '-u', HA_UNIT, '-n', '1', '-o', 'cat', '--no-pager']);
+	return preg_replace('/^(INFO|WARNING|ERROR): /', '', trim($out));
+}
+
+function op_ha_get(array $req): array
+{
+	$c = ha_conf_get();
+	$pw = (string)($c['password'] ?? '');
+	return [
+		'installed' => ha_installed(),
+		'enabled' => ha_unit('is-enabled') === 'enabled',
+		'active' => ha_unit('is-active') === 'active',
+		'url' => (string)($c['host'] ?? ''),
+		'port' => (string)($c['port'] ?? ''),
+		'username' => (string)($c['username'] ?? ''),
+		'password_set' => $pw !== '' && $pw !== HA_PLACEHOLDER,
+		'log' => ha_installed() ? ha_last_log() : '',
+	];
+}
+
+/* "http://homeassistant.local", "mqtt://ha.lan/", "192.168.1.198" -> the
+   value stored as nep-mqtt's host (it uses only the host name) and the host */
+function ha_url(string $in): array
+{
+	$in = trim($in);
+	$in !== '' || fail("enter Home Assistant's address");
+	$url = preg_match('~^[a-z][a-z0-9+.-]*://~i', $in) ? $in : "mqtt://$in";
+	$u = parse_url($url);
+	($u && !empty($u['host']) && in_array(strtolower($u['scheme'] ?? ''), ['http', 'https', 'mqtt', 'tcp'], true)
+	 && !isset($u['user']) && !isset($u['pass']) && !isset($u['query']) && !isset($u['fragment'])
+	 && in_array($u['path'] ?? '', ['', '/'], true))
+		|| fail('the address should look like http://homeassistant.local, homeassistant.lan or 192.168.1.20');
+	isset($u['port']) && fail('put the port in the Port field, not in the address');
+	preg_match('/^(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)$/', $u['host']) || fail('the host name has characters it can\'t have');
+	$host = strtolower(trim($u['host'], '[]'));
+	$stored = preg_match('~^[a-z][a-z0-9+.-]*://~i', $in) ? strtolower($u['scheme']) . '://' . $u['host'] : $u['host'];
+	return [$stored, $host];
+}
+
+/* log in to the broker once (MQTT 3.1.1 CONNECT/CONNACK), so a wrong
+   address, port, user name or password is reported before anything is saved */
+function mqtt_probe(string $host, int $port, string $user, string $pass): void
+{
+	$ip = filter_var($host, FILTER_VALIDATE_IP) ? $host : null;
+	if (!$ip) {
+		$a = gethostbynamel($host);
+		$a || fail("the gateway can't find $host" . (str_ends_with($host, '.local')
+			? ' (names ending in .local need mDNS, which the gateway doesn\'t use): enter Home Assistant\'s IP address instead,'
+			  . ' from Settings > System > Network in Home Assistant, or a name your router knows'
+			: ': check the address'));
+		$ip = $a[0];
+	}
+	$target = str_contains($ip, ':') ? "[$ip]" : $ip;
+	$s = @stream_socket_client("tcp://$target:$port", $errno, $errstr, 8);
+	$where = $host === $ip ? $host : "$host ($ip)";
+	$s || fail("nothing answers on $where port $port: is the Mosquitto broker installed and started in Home Assistant?");
+	stream_set_timeout($s, 8);
+	$str = fn(string $x) => pack('n', strlen($x)) . $x;
+	$body = $str('MQTT') . "\x04" . chr(0x80 | 0x40 | 0x02) . pack('n', 30)
+	      . $str('nep-mqtt-check-' . bin2hex(random_bytes(3))) . $str($user) . $str($pass);
+	$n = strlen($body);
+	$len = '';
+	do {
+		$b = $n % 128;
+		$n = intdiv($n, 128);
+		$len .= chr($n ? $b | 128 : $b);
+	} while ($n);
+	fwrite($s, "\x10" . $len . $body);
+	$r = '';
+	while (strlen($r) < 4 && !feof($s)) {
+		$c = fread($s, 4 - strlen($r));
+		if ($c === false || $c === '')
+			break;
+		$r .= $c;
+	}
+	@fwrite($s, "\xe0\x00");		/* DISCONNECT */
+	fclose($s);
+	(strlen($r) === 4 && $r[0] === "\x20")
+		|| fail("$host port $port answered, but not as an MQTT broker (no TLS: use the broker's plain port, normally 1883)");
+	switch (ord($r[3])) {
+	case 0:
+		return;
+	case 4:
+	case 5:
+		fail('Home Assistant didn\'t accept the user name or password: check them, and that the user is allowed to log in (see the steps below)');
+	default:
+		fail('the broker refused the connection (CONNACK code ' . ord($r[3]) . ')');
+	}
+}
+
+function op_ha_set(array $req): array
+{
+	need_token($req);
+	ha_installed() || fail("the Home Assistant service (nep-mqtt) isn't installed on this gateway;"
+		. ' install it once with: sudo sh /usr/local/share/zlg/ha-mqtt/install.sh');
+	return with_lock('ha', function () use ($req) {
+		if (empty($req['enabled'])) {
+			run(['/usr/bin/systemctl', 'disable', '--now', HA_UNIT]);
+			syslog(LOG_INFO, 'Home Assistant: turned off');
+			return ['enabled' => false, 'active' => false];
+		}
+		[$stored, $host] = ha_url((string)($req['url'] ?? ''));
+		$port = trim((string)($req['port'] ?? ''));
+		(ctype_digit($port) && (int)$port >= 1 && (int)$port <= 65535) || fail('the port is a number from 1 to 65535');
+		$user = (string)($req['username'] ?? '');
+		preg_match('/^[\x21-\x7e]{1,64}$/', $user) || fail('the user name needs 1 to 64 letters, digits or symbols, without spaces');
+		$pass = (string)($req['password'] ?? '');
+		if ($pass === '') {
+			$old = (string)(ha_conf_get()['password'] ?? '');
+			($old !== '' && $old !== HA_PLACEHOLDER) || fail('enter the password');
+			$pass = $old;
+		}
+		(strlen($pass) <= 128 && !preg_match('/[\x00-\x1f\x7f]/', $pass) && trim($pass) === $pass)
+			|| fail('the password can have up to 128 characters, without spaces at either end');
+		mqtt_probe($host, (int)$port, $user, $pass);
+		ha_conf_set(['host' => $stored, 'port' => (string)(int)$port, 'username' => $user, 'password' => $pass]);
+		run(['/usr/bin/systemctl', 'enable', HA_UNIT]);
+		run(['/usr/bin/systemctl', 'restart', HA_UNIT], $rc);
+		$rc === 0 || fail('saved, but the service didn\'t start: see journalctl -u nep-mqtt');
+		syslog(LOG_INFO, "Home Assistant: $host:$port as $user");
+		return ['enabled' => true, 'active' => ha_unit('is-active') === 'active', 'host' => $host];
+	});
+}
+
 /* ---- the request loop -------------------------------------------------- */
 
 const OPS = [
@@ -1285,6 +1490,8 @@ const OPS = [
 	'mi.report_get' => 'op_mi_report_get',
 	'weather.get' => 'op_weather_get',
 	'weather.set' => 'op_weather_set',
+	'ha.get' => 'op_ha_get',
+	'ha.set' => 'op_ha_set',
 ];
 
 function serve(): void

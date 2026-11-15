@@ -33,7 +33,7 @@ $act = base_url() . 'access/';
     <input type="hidden" name="page" value="<?php echo $h($page); ?>"/>
     <div class="row"><label>Current password</label><input type="password" name="old" autocomplete="current-password"/></div>
     <div class="row"><label>New password</label><input type="password" name="new" autocomplete="new-password"/>
-      <span class="hint">8 characters or more. It protects the Wi-Fi, Modules and Advanced pages.</span></div>
+      <span class="hint">8 characters or more. It protects the Configure, Modules and Advanced pages.</span></div>
     <div class="row"><label>New password again</label><input type="password" name="new2" autocomplete="new-password"/></div>
     <div class="row"><label></label><button class="zlg-btn" type="submit">Change password</button></div>
   </form>

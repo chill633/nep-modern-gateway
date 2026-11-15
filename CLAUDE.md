@@ -931,6 +931,44 @@ image or by zlg/install.sh.
 - Topics and unique IDs contain the gateway serial (read from
   /root/Gateway/sn at run time); keep examples in docs as <gateway serial>.
 
+### Configure page (2026-11-15)
+
+The user's request: the Wi-Fi page also configures Home Assistant; menu
+"Wi-Fi" -> "Configure" (lang_navi_Configure; English Configure, Japanese
+設定, Chinese 设置; zlg-web-port's menu entry and language lines), the URL stays
+/nep/wifi (bookmarks, lighttpd's /wifi redirect). Fields: user name, password,
+URL, port, prefilled nep / http://homeassistant.local / 1883 (the user's
+choices) until set up; login needed for changes as for Wi-Fi; instructions
+for adding a dedicated HA user on the page.
+- zlg-admin: ha.get (no password returned, password_set instead; service
+  state; last journal line) and ha.set (need_token; MQTT 3.1.1 CONNECT probe
+  before saving: CONNACK 4/5 -> wrong login; writes [mqtt] in
+  /etc/nep-mqtt.conf in place, 600; enable + restart; enabled=0 -> disable
+  --now). The template /usr/local/share/zlg/ha-mqtt/nep-mqtt.conf is the base
+  when no conf exists; its password CHANGE-ME counts as not set.
+- host is stored as typed (a URL is allowed); nep-mqtt's broker_host() uses
+  the host name only.
+- The gateway can't resolve homeassistant.local: systemd-resolved has -mDNS
+  (LLMNR only). The probe reports it and points to the IP address. Turning
+  on mDNS (resolved + networkd MulticastDNS) was not done.
+- HA's Mosquitto add-on also listens on 1884 (websockets): a probe there
+  says "not an MQTT broker".
+- Tested 2026-11-15 on .239 without root: php -l, ha_url/ha_conf_set/
+  ha_conf_get against scratch files, configparser reading the result
+  (password with # % = and a space), probes (.local, unknown name, closed
+  port, port 80, wrong login -> CONNACK refusal; this was one failed login
+  in HA's log), the view rendered with sample data for four states.
+- Installed on .239 the same day (staged copy in ~debian/zlg-update with
+  the board's deps/ and ../nep-firmware{,.sh}, which install-web.sh needs;
+  the user ran install-web.sh and ha-mqtt/install.sh). Live: menu shows
+  Configure, the section shows the running link, ha_save without login ->
+  "please log in first", bad csrf -> "the page had expired". The user
+  logged in and saved (password kept): probe passed, conf rewritten (600),
+  nep-mqtt restarted, connected and publishing again within a minute.
+- The board's /usr/local/share/zlg/web had an older install-web.sh (no
+  in-place check, `rm -rf $SHARE` then copy): updating from a copy needs
+  deps/ in that copy, or the web libraries are lost.
+
 ## Workstation rebuilt after a disk failure (2026-11-14)
 
 The user's disk failed. This checkout is a fresh clone (2026-11-15), so it
