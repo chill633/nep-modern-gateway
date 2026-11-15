@@ -968,6 +968,12 @@ there; NEP's web pages still show it.
   afternoon), the GridBOSS AC-couple port, HA's gateway Power and its
   "Power (inverter reading)"**; the first two should agree within a few %
   (about 5 min apart). The user asked to continue this in the morning.
+  Dusk run 16:05-16:18 (GridBOSS 0 W per the user): counter-based system
+  power 332 then 277 W while inverters 1 and 14 read 0 W; the system
+  counter still rose 37 Wh in 12 min. Likely the counters catching up
+  after the 15:34 gateway-plc restart (they lagged, then step up), so
+  counter-based power reads high for a while after a restart. The
+  morning check (no restart since 01:00 except at night) is the real test.
 - After gateway-plc restarts, the per-inverter counters lag for a while
   and then catch up the gap in steps (system 11.482 -> 11.76 kWh in three
   minutes): averaged over the window that's the right energy.
