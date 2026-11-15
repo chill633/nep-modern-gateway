@@ -102,7 +102,8 @@ positions, and php -l can't catch a run-time-only error),
 port ZLG_WEB_PORT, 8080 until install-web.sh --switch). Deps pinned in
 fetch-deps.sh (deps/ is git-ignored).
 
-The footer shows "Version 1.00-chill633" (zlg-web-port replaces the echo
+The footer shows "Version 1.10-chill633" (1.00 until 2026-11-15, bumped at
+the user's request after the Configure page; zlg-web-port replaces the echo
 of NEP's /opt/config/version, which NEP's info and log pages still read).
 
 base_url must be a full URL (built from HTTP_HOST in config.php): NEP calls
