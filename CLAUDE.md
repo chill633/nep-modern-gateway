@@ -1052,7 +1052,16 @@ in ~/Working:
   kernel stages built by Claude (SPL 31744 bytes; 6.12.115-m6g2c-dirty,
   196 fragment settings, ath9k_htc + rtl8xxxu); Linux 6.12's tools needed
   no fix. rootfs + image (sudo) are the user's. local.env: NTP_SERVERS
-  added; WIFI_SSID / WIFI_PASSPHRASE were empty in the restored copy.
+  added; the user filled in the Wi-Fi lines in the build tree's copy
+  before the rootfs stage (the checkout's copy still has them empty).
+  Image built 2026-11-15 16:05 (the counter-based nep-mqtt copied into
+  work/rootfs-trixie by the user before the image stage); checked without
+  root: SPL/U-Boot offsets, today's zImage, trixie, local-ntp.conf,
+  nep-firmware 20230903, Configure page + 1.10 footer, deps, zlg-time.so
+  (67 KB: new linker padding, same exports), wpa conf 600 with a derived
+  psk and no plain passphrase. **Written to a card by the user and booted
+  on the non-production gateway (the reserve); the user is satisfied with
+  it.** That card's gateway setup (README 7/7a) isn't recorded as done.
 - zlg-migrate.tar.gz: **rebuilt 2026-11-15** in ~/Working from d666180
   (Configure page included): fetch-deps.sh (deps/ identical to the
   board's), zlg-time.so built with Ubuntu's gcc-arm-linux-gnueabihf 15.3
