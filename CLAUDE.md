@@ -224,10 +224,10 @@ IPv4-only fetches). The user installed the kit's report on it.
   over the board's 20230903. The board has no install.sh in
   /usr/local/share/zlg. Its /etc/default/zlg: ZLG_WEATHER_SOURCE=weewx,
   ZLG_WEATHER_URL=http://weather.home.arpa/zlg.json (lat/lon kept).
-  Leftovers on the board, deletable: ~/zlg-weather-deploy, ~/zlg-wsrc,
-  /etc/default/zlg.bak-weather, zlg-web-port.bak-20261111 and
-  /usr/local/sbin/zlg-admin.bak-20261111. The reserve (.238) has none of
-  this yet.
+  The deploy leftovers (~/zlg-weather-deploy, ~/zlg-wsrc, ~/zlg-update,
+  the .bak-weather / .bak-20261111 copies) were already gone when checked
+  on 2026-11-15; no backup files remain in /usr/local, /etc/default or
+  ~debian. The reserve (.238) has none of this yet.
 - Outbound audit (2026-11-10, the user's question): with Local Weewx only
   NTP was left (plus apt when run). Browser check of Overview, Energy
   Output (/nep/output/day/0), Weather, Wi-Fi, Modules, Advanced: every
