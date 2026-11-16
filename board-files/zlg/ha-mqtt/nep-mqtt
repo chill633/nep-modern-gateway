@@ -22,6 +22,7 @@ import argparse
 import configparser
 import collections
 import datetime
+import http.cookiejar
 import json
 import logging
 import re
@@ -147,8 +148,15 @@ def broker_host(value):
     return value
 
 
+# One cookie jar for every request: the web interface (CodeIgniter) starts a
+# session on each page, and without its cookie every poll would leave a new
+# session file in the chroot's small /tmp (25 a minute).
+_opener = urllib.request.build_opener(
+    urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+
 def fetch(url, n):
-    with urllib.request.urlopen(url.format(n=n), timeout=10) as r:
+    with _opener.open(url.format(n=n), timeout=10) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 

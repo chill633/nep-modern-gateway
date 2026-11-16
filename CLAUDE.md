@@ -980,6 +980,27 @@ there; NEP's web pages still show it.
   and then catch up the gap in steps (system 11.482 -> 11.76 kWh in three
   minutes): averaged over the window that's the right energy.
 
+### Web sessions filled the chroot's /tmp (2026-11-16)
+
+The dashboard showed every module offline at 07:45: /srv/zlg/tmp (tmpfs,
+32 MB) was full with ~10,000 CodeIgniter session files in zlg-web-sess,
+so gdata.sh's status files stopped at 06:28 ("sh: write error: No space
+left on device" from zlg-chroot every 4 min); min.dat and gateway-plc
+were unaffected. Cause: nep-mqtt fetched 25 pages a minute without a
+cookie (a new session each), and Debian's PHP never collects sessions
+(session.gc_probability 0; Debian's sessionclean covers only
+/var/lib/php/sessions). The tmpfs is emptied at the 01:00 restart and
+filled in ~5.5 h. Fix: nep-mqtt keeps a cookie jar (one session; tested
+against a stub server: 25 requests, one Set-Cookie); php-fpm.conf sets
+session.gc_probability 1 / gc_divisor 100 / gc_maxlifetime 7200
+(= sess_expiration; CI3's files driver deletes its zlg_session* files
+older than that). `php-fpm8.4 -t` on .239 passed with the new conf.
+Usage of /srv/zlg/tmp is readable without root (df), the folder isn't.
+
+Power at 07:38-07:48 the same morning (min.dat, no sessions): system
+day-energy rise 1.25 kW over 10 min (1.08 kW over 4), GridBOSS ~1.3 kW
+(the user), NEP's power figure 0.39 kW (low, the morning pattern).
+
 ### Configure page (2026-11-15)
 
 The user's request: the Wi-Fi page also configures Home Assistant; menu
