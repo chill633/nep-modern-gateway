@@ -1064,6 +1064,25 @@ in ~/Working:
   it.** The user's decision: that card stays as it is, without the
   gateway setup (README 7/7a), as a test system and emergency spare; it
   won't go into production. Don't propose setting it up unless asked.
+- **Fresh OS on a new SSD (2026-11-15 evening):** Ubuntu 26.10 again;
+  ~/Working, including the build tree, survived. The user installed README
+  1's packages (19 were missing, qemu-user + qemu-user-binfmt in place of
+  qemu-user-static); nothing else was needed (fetch-deps.sh not rerun:
+  deps/ intact). uboot and kernel stages rebuilt by Claude without errors
+  (SPL 31744 bytes; 6.12.115-m6g2c-dirty, all 196 fragment settings, 87
+  modules incl. ath9k_htc + rtl8xxxu); rootfs (reusing work/rootfs-trixie)
+  and image by the user. Image 20:05 (out/m6g2c-debian-trixie-armhf.img
+  (.xz)), checked without root: both sha256 OK, xz -t OK; p1 boot from
+  sector 8192 (128 MiB), p2 root; SPL at 1 KiB and U-Boot at 69 KiB
+  byte-identical to out/; zImage and DTB identical to the build;
+  extlinux root=PARTUUID=4d364732-02 ro; Debian 13.7, hostname m6g2c;
+  local-ntp.conf (NTP=192.168.1.1, FallbackNTP=); ath9k_htc firmware;
+  /usr/local/share/zlg identical to the build tree (= checkout a4c643f:
+  nep-firmware 20230903, Configure page, 1.10 footer, ha-mqtt) plus the
+  stage's zlg-time.so (six exports, no NEEDED); wpa conf 600 with a
+  derived psk, the passphrase nowhere in either partition. Boot-partition
+  files are owned by uid 1000, mode 775 (copied as-is from
+  work/kernel-install; harmless). Not written to a card or booted yet.
 - zlg-migrate.tar.gz: **rebuilt 2026-11-15** in ~/Working from d666180
   (Configure page included): fetch-deps.sh (deps/ identical to the
   board's), zlg-time.so built with Ubuntu's gcc-arm-linux-gnueabihf 15.3
