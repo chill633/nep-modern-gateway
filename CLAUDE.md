@@ -923,8 +923,9 @@ image or by zlg/install.sh.
 - Running on the New unit (.239) since 2026-11-15, installed from the same
   files: broker = Home Assistant's Mosquitto add-on at
   homeassistant.home.arpa (192.168.1.198:1883), an HA user for the gateway
-  (credentials only in /etc/nep-mqtt.conf on the board). Entities and the
-  Energy dashboard confirmed by the user. The board's installed copy came
+  (credentials only in /etc/nep-mqtt.conf on the board). The user has
+  checked only the connection to HA (2026-11-16: entities and the Energy
+  dashboard aren't set up yet; a separate, larger task of the user's). The board's installed copy came
   from ~/nep-ha-mqtt there, not /usr/local/share/zlg/ha-mqtt (the card's
   image predates it).
 - Modules 23 and 24 are unplugged on purpose (future expansion): "not
@@ -964,10 +965,9 @@ there; NEP's web pages still show it.
   ~22 W reported; no GridBOSS reading for that window).
 - Installed on .239 at 16:05 (the user ran ha-mqtt/install.sh). At ~16:10
   the GridBOSS read 0 W (dusk) while NEP's figure still said ~460 W.
-  **Open: compare at the same moment, in good light (mid-morning, early
-  afternoon), the GridBOSS AC-couple port, HA's gateway Power and its
-  "Power (inverter reading)"**; the first two should agree within a few %
-  (about 5 min apart). The user asked to continue this in the morning.
+  Compared in good light on 2026-11-16 (see "Web sessions filled the
+  chroot's /tmp"): the counters agree with the GridBOSS, NEP's figure
+  doesn't. HA's sensors weren't compared (HA not set up for reporting).
   Dusk run 16:05-16:18 (GridBOSS 0 W per the user): counter-based system
   power 332 then 277 W while inverters 1 and 14 read 0 W; the system
   counter still rose 37 Wh in 12 min. Likely the counters catching up
@@ -1000,6 +1000,9 @@ Usage of /srv/zlg/tmp is readable without root (df), the folder isn't.
 Power at 07:38-07:48 the same morning (min.dat, no sessions): system
 day-energy rise 1.25 kW over 10 min (1.08 kW over 4), GridBOSS ~1.3 kW
 (the user), NEP's power figure 0.39 kW (low, the morning pattern).
+07:48-07:58 (clear sky): 0.447 -> 0.706 kWh = 1.55 kW (1.64 kW over the
+last 4 min), GridBOSS 1.6 kW, NEP's figure 0.55 kW. Counter-based power
+(what nep-mqtt publishes) is right within a few %; settled.
 
 ### Configure page (2026-11-15)
 
