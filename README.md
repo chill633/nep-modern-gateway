@@ -669,6 +669,28 @@ systemctl list-units 'zlg*'
   answering, the board's RTC keeps the time meanwhile. NEP's software
   depends on the clock (local times in its files and charts), so check
   that the server's time is right first.
+* **Moving the gateway to another network** (for example a separate IoT
+  network or VLAN): change the Wi-Fi on the Configure page (section 7a)
+  from the network it is on now. It may then get a new address: find it
+  in the router's DHCP list. The 90-second connect test passes on networks
+  that block ping. Then check what the gateway reaches across networks;
+  every connection goes out from the gateway, so the firewall needs to
+  allow it to reach:
+  * the MQTT broker (Home Assistant, TCP 1883, section 7b): nothing in
+    Home Assistant holds the gateway's address, but the broker setting on
+    the Configure page must be an address or name the new network can
+    reach;
+  * the weewx station (HTTP, the Weather page's station field);
+  * an NTP server. An NTP server handed out by the new network's DHCP
+    takes precedence over `NTP=` in `local-ntp.conf`; if it hands out none,
+    update that file to a server the new network reaches.
+
+  Use names the router's DNS knows, with the full domain
+  (`ha.home.arpa`, not `ha`): a bare name may answer `resolvectl query`
+  over LLMNR, but the gateway's programs look names up through DNS only.
+  `getent ahostsv4 <name>` on the gateway shows what they get. NEP's
+  programs in `/srv/zlg` use systemd-resolved (127.0.0.53), so they follow
+  the change without a restart.
 * **Email reports** are NEP's, built hourly by `gene.sh`, and are off on
   both gateways: the report switches in `/opt/config/report` are all
   `0`, no recipient is set (`/opt/config/general`), and the jobs that would
@@ -983,7 +1005,11 @@ MQTT port is needed: `nep-mqtt` doesn't use TLS.
 The gateway doesn't resolve `.local` names: systemd-resolved runs without
 mDNS here. If Home Assistant isn't known as `homeassistant.local` to the
 router's DNS, the page says so: enter Home Assistant's IP address (Settings
-> System > Network in Home Assistant) or a name the router knows. Editing
+> System > Network in Home Assistant) or a name the router knows, with its
+full domain (`ha.home.arpa`; a bare `ha` works only if the router's DNS
+answers for it).
+On a separate IoT network, see "Moving the gateway to another network" in
+section 7. Editing
 `/etc/nep-mqtt.conf` by hand still works (`sudo systemctl restart
 nep-mqtt` afterwards).
 

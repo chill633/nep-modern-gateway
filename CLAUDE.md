@@ -939,7 +939,23 @@ image or by zlg/install.sh.
   connected 11:50, publishing 24 inverters. The restart's old process
   exited 1 (publishing "offline" while disconnected raised in paho);
   fixed in the repo, installed by the user 11:53 (clean stop and
-  reconnect; the not-connected path itself not exercised). The user has
+  reconnect; the not-connected path itself not exercised). HA checked at
+  12:04: 25 devices, 272 entities, gateway Power = sum of the 22
+  inverters (counter-based, filled in ~10 min after the restart).
+- Same day, after the move: zlg-chroot copied the host's resolv.conf at
+  its start (11:27, before Wi-Fi had DNS: no nameserver), so zlg-weather
+  failed ("Temporary failure in name resolution") while the host resolved
+  weather.home.arpa (10.20.60.12). zlg-chroot now copies resolved's
+  stub-resolv.conf (127.0.0.53; answers inside the chroot, verified)
+  instead; README 7 "Moving the gateway to another network" covers the
+  move (outbound only: broker, weewx, NTP; FQDNs; DHCP NTP overrides
+  local-ntp.conf, as seen: timesyncd on 10.20.60.1 with NTP=192.168.1.1
+  in the drop-in). The new zlg-chroot isn't installed on the board yet;
+  the user copied stub-resolv.conf over /srv/zlg/etc/resolv.conf by hand
+  (no restart) and the 12:12 weather fetch succeeded. The user also set
+  local-ntp.conf to NTP=10.20.60.1 (synced) and Claude set NTP_SERVERS=
+  10.20.60.1 in both local.env files; the build tree's local.env still
+  names the old Wi-Fi network (the user updates it before the next image). The user has
   checked only the connection to HA (2026-11-16: entities and the Energy
   dashboard aren't set up yet; a separate, larger task of the user's). The board's installed copy came
   from ~/nep-ha-mqtt there, not /usr/local/share/zlg/ha-mqtt (the card's

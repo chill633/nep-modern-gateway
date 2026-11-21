@@ -80,9 +80,16 @@ start() {
 	# reads them and crashes without them; ZLG's system has none
 	mnt /usr/share/zoneinfo --bind -o ro /usr/share/zoneinfo
 
-	# DNS: systemd-resolved's stub works inside (same network namespace)
+	# DNS: systemd-resolved's stub (127.0.0.53) works inside (same network
+	# namespace) and follows network changes; a copy of the host's
+	# resolv.conf would keep the DNS servers of the network at start-up
+	# (none at all if Wi-Fi wasn't up yet)
 	rm -f "$ROOT/etc/resolv.conf"
-	cp -L /etc/resolv.conf "$ROOT/etc/resolv.conf"
+	if [ -f /run/systemd/resolve/stub-resolv.conf ]; then
+		cp /run/systemd/resolve/stub-resolv.conf "$ROOT/etc/resolv.conf"
+	else
+		cp -L /etc/resolv.conf "$ROOT/etc/resolv.conf"
+	fi
 
 	# Requests from inside (reboot -> restart of zlg.target, see
 	# zlg-restart.path) arrive in the host's /run/zlg.
