@@ -1150,6 +1150,21 @@ Where other sections say these files exist, this section wins. A backup
 snapshot of an early version of this kit (m6g2c-buster, 2026-11-04) was
 deleted on 2026-11-15, superseded by this repository.
 
+**Workstation test tools (2026-11-21, installed by the user):** php-cli
+8.5.9 + php-mbstring, php-xml, php-cgi (Ubuntu 26.10 has 8.5; the board
+runs Debian's 8.4: lint and run here, the qemu + Debian armhf 8.4 method
+above for exact 8.4 behaviour; ctype/json/tokenizer/iconv/shmop/openssl
+come with php8.5-common); shellcheck 0.11.0; python3-paho-mqtt 2.1.0,
+mosquitto + mosquitto-clients (service disabled: start a broker by hand
+for nep-mqtt tests, don't use the user's HA); Firefox snap with
+/snap/bin/geckodriver. Already there: qemu-user + binfmt,
+gcc-arm-linux-gnueabihf, dtc, debugfs, jq, gh. No sshpass (SSH to the
+board is by key). First run: all 19 kit PHP files pass php -l, nep-mqtt
+compiles, shellcheck -S warning on zlg-chroot and the install scripts
+gives only two SC2043 (deliberate one-item loops in zlg-chroot).
+Before 2026-11-21 there was no PHP here (zlg-admin was linted on the
+board).
+
 ## Vendor security report (2026-11-06)
 
 The user plans to report NEP's vulnerabilities to the vendor. The report
