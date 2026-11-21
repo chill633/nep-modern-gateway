@@ -932,7 +932,13 @@ image or by zlg/install.sh.
 - Running on the New unit (.239) since 2026-11-15, installed from the same
   files: broker = Home Assistant's Mosquitto add-on at
   homeassistant.home.arpa (192.168.1.198:1883), an HA user for the gateway
-  (credentials only in /etc/nep-mqtt.conf on the board). The user has
+  (credentials only in /etc/nep-mqtt.conf on the board). Since 2026-11-21
+  (gateway moved to the IoT network, 10.20.60.13): broker ha.home.arpa
+  (10.20.60.10, router DNS; the bare name "ha" answers only over LLMNR,
+  which glibc doesn't use here), set by the user on the Configure page;
+  connected 11:50, publishing 24 inverters. The restart's old process
+  exited 1 (publishing "offline" while disconnected raised in paho);
+  fixed in the repo, not yet installed on the board. The user has
   checked only the connection to HA (2026-11-16: entities and the Energy
   dashboard aren't set up yet; a separate, larger task of the user's). The board's installed copy came
   from ~/nep-ha-mqtt there, not /usr/local/share/zlg/ha-mqtt (the card's

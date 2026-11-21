@@ -404,7 +404,13 @@ def run(bridge, dry_run):
             healthy = None
         stop.wait(interval)
 
-    client.publish(bridge.avail, "offline", qos=1, retain=True).wait_for_publish(5)
+    # not connected (broker unreachable): the will set at connect already
+    # marks the gateway offline when the broker drops the session
+    if client.is_connected():
+        try:
+            client.publish(bridge.avail, "offline", qos=1, retain=True).wait_for_publish(5)
+        except (RuntimeError, ValueError) as e:
+            log.warning("could not publish offline status: %s", e)
     client.disconnect()
     client.loop_stop()
     return 0
