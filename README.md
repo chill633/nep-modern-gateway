@@ -846,8 +846,12 @@ checks every request itself; the pages reach it over a socket
   the link to Home Assistant (section 7b). Wi-Fi: the connection (network, access point, signal,
   bit rate, address) and its settings: the network name, with a search for
   networks in range; WPA2-Personal, WPA3-Personal or open; an address from
-  the router (DHCP) or a fixed one. A change is tested for 90 seconds: if
-  the gateway can't connect, the previous settings come back by themselves.
+  the router (DHCP) or a fixed one. A change is tested for 90 seconds
+  (connected, an address, a default route, and the router reachable: it
+  answers ping or ARP, since many guest and IoT networks don't answer
+  ping): if the gateway can't connect, the previous settings come back by
+  themselves, and the system log (`journalctl -t zlg-admin`) says which
+  step failed.
   If the power goes during the test, `zlg-wifi-guard` puts them back at the
   next boot. Tested: an unchanged save reconnects in about 10 seconds; a
   wrong Wi-Fi password is undone after 90 seconds.

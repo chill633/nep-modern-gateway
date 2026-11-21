@@ -456,17 +456,38 @@ function wifi_restart(): void
 	run(['/usr/bin/networkctl', 'reconfigure', IFACE]);
 }
 
-/* connected: associated, an IPv4 address, and the router answers */
+/* why the last wifi_connected() call said no (for the log) */
+$wifi_why = '';
+
+/* connected: associated, an IPv4 address, a default route, and the router
+   is reachable. Many routers (guest and IoT networks, mesh systems) don't
+   answer ping, so a resolved ARP entry for the router counts too: the ping
+   makes the kernel ask for its address, and an answer proves the link. */
 function wifi_connected(): ?array
 {
+	global $wifi_why;
 	$l = wifi_link();
-	if ($l['state'] !== 'COMPLETED' || $l['ip'] === '')
+	if ($l['state'] !== 'COMPLETED') {
+		$wifi_why = 'not associated (wpa_state ' . ($l['state'] ?: 'unknown') . ')';
 		return null;
+	}
+	if ($l['ip'] === '') {
+		$wifi_why = 'associated, but no IPv4 address';
+		return null;
+	}
 	$route = run([SBIN . '/ip', '-4', 'route', 'show', 'default', 'dev', IFACE]);
-	if (!preg_match('/default via ([\d.]+)/', $route, $m))
+	if (!preg_match('/default via ([\d.]+)/', $route, $m)) {
+		$wifi_why = "address {$l['ip']}, but no default route";
 		return null;
+	}
 	run(['/usr/bin/ping', '-c', '1', '-W', '2', '-I', IFACE, $m[1]], $rc);
-	return $rc === 0 ? $l : null;
+	if ($rc === 0)
+		return $l;
+	$neigh = run([SBIN . '/ip', '-4', 'neigh', 'show', $m[1], 'dev', IFACE]);
+	if (preg_match('/\blladdr\s+\S+.*\b(REACHABLE|STALE|DELAY|PROBE|PERMANENT)\b/', $neigh))
+		return $l;
+	$wifi_why = "address {$l['ip']}, but router {$m[1]} is not reachable";
+	return null;
 }
 
 function wifi_wait(int $secs): ?array
@@ -509,7 +530,8 @@ function wifi_apply_job(): void
 		return;
 	}
 
-	syslog(LOG_WARNING, "zlg-admin: Wi-Fi \"$ssid\" did not connect in " . WIFI_WAIT . " s; restoring the previous settings");
+	global $wifi_why;
+	syslog(LOG_WARNING, "zlg-admin: Wi-Fi \"$ssid\" did not connect in " . WIFI_WAIT . " s ($wifi_why); restoring the previous settings");
 	wifi_status(['id' => $id, 'state' => 'rolling_back', 'ssid' => $ssid]);
 	put_atomic(WPA_CONF, (string)file_get_contents("$prev/wpa.conf"), 0600);
 	put_atomic(NET_CONF, (string)file_get_contents("$prev/net.conf"), 0644);

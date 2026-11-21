@@ -841,8 +841,17 @@ tested on the New unit (.239); README 7a "Settings pages" documents them.
   and #modindex_box have fixed heights, 400/620 px, so not reused).
 - Wi-Fi: writes /etc/wpa_supplicant/wpa_supplicant-wlan0.conf (WPA2: derived
   psk only) and /etc/systemd/network/25-wireless.network, via a transient
-  systemd-run job; 90 s connect test (wpa_state COMPLETED, IPv4, router
-  answers ping), else restore and retry. Pending marker
+  systemd-run job; 90 s connect test (wpa_state COMPLETED, IPv4, default
+  route, router answers ping or has a resolved ARP entry), else restore and
+  retry; the rollback's log line says which step failed. 2026-11-21: the
+  user's new IoT network connected and served the page, but the
+  ping-only test rolled it back twice (confirmed by the user: that
+  network blocks ICMP by default, 9 pings to the router, 0 answers) to an
+  SSID that no longer exists (the ARP fallback came from that). Installed
+  on the New unit by the user the same day (/usr/local/sbin/zlg-admin =
+  the repo's); the next save of that network was confirmed at 11:42
+  ("connected as 10.20.60.13", router 10.20.60.1 in ARP). The New unit
+  is now at 10.20.60.13 on that network (no longer 192.168.1.239). Pending marker
   /var/lib/zlg-admin/wifi-pending + zlg-wifi-guard.service (sysinit, before
   wpa_supplicant) undo an unconfirmed change at boot. wpa_cli and iw are in
   /usr/sbin (not in the debian user's PATH). Tested 2026-11-08: unchanged
