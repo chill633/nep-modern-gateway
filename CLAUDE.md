@@ -938,7 +938,8 @@ image or by zlg/install.sh.
   which glibc doesn't use here), set by the user on the Configure page;
   connected 11:50, publishing 24 inverters. The restart's old process
   exited 1 (publishing "offline" while disconnected raised in paho);
-  fixed in the repo, not yet installed on the board. The user has
+  fixed in the repo, installed by the user 11:53 (clean stop and
+  reconnect; the not-connected path itself not exercised). The user has
   checked only the connection to HA (2026-11-16: entities and the Energy
   dashboard aren't set up yet; a separate, larger task of the user's). The board's installed copy came
   from ~/nep-ha-mqtt there, not /usr/local/share/zlg/ha-mqtt (the card's
