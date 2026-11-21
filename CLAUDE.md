@@ -954,8 +954,9 @@ image or by zlg/install.sh.
   the user copied stub-resolv.conf over /srv/zlg/etc/resolv.conf by hand
   (no restart) and the 12:12 weather fetch succeeded. The user also set
   local-ntp.conf to NTP=10.20.60.1 (synced) and Claude set NTP_SERVERS=
-  10.20.60.1 in both local.env files; the build tree's local.env still
-  names the old Wi-Fi network (the user updates it before the next image). The user has
+  10.20.60.1 in both local.env files. The build tree's local.env names the
+  new Wi-Fi network (passphrase entered by the user; its derived psk's
+  sha256 matched the board's wpa conf, compared by hash only). The user has
   checked only the connection to HA (2026-11-16: entities and the Energy
   dashboard aren't set up yet; a separate, larger task of the user's). The board's installed copy came
   from ~/nep-ha-mqtt there, not /usr/local/share/zlg/ha-mqtt (the card's
